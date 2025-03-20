@@ -33,14 +33,23 @@
 ## 项目结构
 
 ├── app/ # Android 应用代码
+
 │ ├── src/ # 源代码
+
 │ │ ├── main/ # 主要代码
+
 │ │ │ ├── java/ # Java 代码
+
 │ │ │ ├── cpp/ # C++ 代码 (JNI)
+
 │ │ │ ├── res/ # 资源文件 (布局、图片等)
+
 │ ├── build.gradle # Gradle 构建文件
+
 ├── gradle/ # Gradle 相关文件
+
 ├── gradlew # Gradle 包装器
+
 └── settings.gradle # 项目设置
 
 

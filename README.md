@@ -47,7 +47,7 @@
 ## 编译和运行
 
 1.  **安装 Android SDK 和 NDK:**  确保你已经安装了 Android SDK 和 NDK，并配置好了环境变量。
-2.  **克隆代码:**  `git clone [仓库地址]`
+2.  **克隆代码:**  `[git clone [仓库地址]](https://github.com/424635328/MediaPlayer)`
 3.  **使用 Android Studio 打开项目:**  在 Android Studio 中选择 "Open an existing Android Studio project"，然后选择项目根目录下的 `settings.gradle` 文件。
 4.  **配置 NDK 路径 (如果需要):**  如果 Android Studio 没有自动检测到 NDK 路径，你需要在 `local.properties` 文件中手动配置 `ndk.dir` 属性。
 5.  **构建项目:**  在 Android Studio 中点击 "Build" -> "Make Project" 或者 "Build" -> "Rebuild Project"。
@@ -66,15 +66,7 @@
 
 ## 许可证
 
-MIT License
-
-Copyright (c) 2025 424635328@qq.com
-
-特此授权任何获得本软件副本及相关文档文件（“软件”）的人免费使用、复制、修改、合并、发布、分发、再许可和/或销售本软件的副本，并允许向其提供本软件的人员这样做，但须符合以下条件：
-
-上述版权声明和本许可声明应包含在本软件的所有副本或重要部分中。
-
-本软件按“原样”提供，不作任何形式的明示或暗示的保证，包括但不限于对适销性、适用于特定目的和不侵权的保证。 在任何情况下，作者或版权所有者均不对因本软件或本软件的使用或其他处理方式而引起的任何索赔、损害或其他责任承担责任，无论是在合同、侵权或其他方面。
+本项目采用 MIT License 授权。 有关详细信息，请参阅 [LICENSE](LICENSE) 文件。
 
 ## 联系方式
 

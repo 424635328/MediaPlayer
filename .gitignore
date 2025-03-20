@@ -1,0 +1,131 @@
+# 通用 (General)
+######################
+*.swp                      # 忽略 Vim 交换文件
+*~                         # 忽略编辑器备份文件 (例如：`文件~`)
+*.bak                      # 忽略备份文件 (例如：`文件.bak`)
+*.tmp                      # 忽略临时文件
+*.log                      # 忽略日志文件
+._*                       # 忽略 macOS 资源 fork 文件 (以 `._` 开头的文件)
+.DS_Store                   # 忽略 macOS .DS_Store 文件夹 (存储目录视图选项)
+Thumbs.db                  # 忽略 Windows Thumbs.db 文件 (存储图像缩略图)
+
+# 操作系统生成的文件 (OS generated files)
+######################
+.AppleDouble              # 忽略 macOS .AppleDouble 目录
+.LSOverride               # 忽略 macOS .LSOverride 文件
+
+# 编译代码 (Compiled Code)
+######################
+*.class                    # 忽略 Java class 文件 (编译后的 Java 字节码)
+*.pyc                      # 忽略 Python pyc 文件 (编译后的 Python 字节码)
+*.pyo                      # 忽略 Python pyo 文件 (优化的 Python 字节码)
+*.rbc                      # 忽略 Ruby rbc 文件 (编译后的 Ruby 代码)
+
+# 包 (Packages)
+######################
+packages                   # 忽略通用 packages 目录
+
+# 日志和数据库 (Logs and databases)
+######################
+*.sqlite                   # 忽略 SQLite 数据库文件
+*.sqlitedb                 # 忽略 SQLite 数据库文件
+*.dump                     # 忽略数据库转储文件
+*.log                      # 忽略日志文件
+
+# Node.js (Node.js 项目相关)
+######################
+node_modules/               # 忽略 node_modules 目录 (存储依赖包)
+npm-debug.log*              # 忽略 npm 调试日志文件
+yarn-error.log*             # 忽略 Yarn 错误日志文件
+.pnp*                       # 忽略 Yarn Plug'n'Play 相关文件
+
+# 环境配置文件 (Environment configuration files)
+######################
+.env                       # 忽略 .env 文件 (存储敏感信息，例如 API 密钥)
+.env.*                     # 忽略以 .env. 开头的文件 (例如：`.env.local`, `.env.production`)
+!/.env.example             # 排除 .env.example 文件 (提供 .env 文件的示例)
+
+# 构建产物 (Build artifacts)
+######################
+dist/                      # 忽略 dist 目录 (通常包含构建后的文件)
+build/                     # 忽略 build 目录 (通常包含构建后的文件)
+coverage/                  # 忽略代码覆盖率报告目录
+tmp/                       # 忽略临时文件目录
+out/                       # 忽略输出目录
+
+# IDE 相关 (IDE specific)
+######################
+.idea/                     # 忽略 IntelliJ IDEA 的项目配置文件
+.vscode/                   # 忽略 Visual Studio Code 的项目配置文件
+*.suo                       # 忽略 Visual Studio 用户选项文件
+*.ntvs*                     # 忽略 Visual Studio 工具文件
+*.njsproj                   # 忽略 Node.js 项目文件
+*.sln                      # 忽略 Visual Studio 解决方案文件
+
+# 编译文件 (Compiled files)
+######################
+*.js.map                   # 忽略 JavaScript 的 source map 文件
+*.d.ts                     # 忽略 TypeScript 的声明文件
+
+# 依赖目录 (Dependency directories)
+######################
+jspm_packages/             # 忽略 jspm 包管理器的依赖目录
+web_modules/                # 忽略 web_modules 目录
+
+# 本地安装的全局工具 (Locally installed global tools)
+######################
+.npm                       # 忽略 npm 本地安装目录
+
+# Yarn Berry 相关 (Yarn Berry specific)
+######################
+.yarn/*                    # 忽略 Yarn Berry 相关文件
+!.yarn/patches              # 排除 Yarn 补丁文件
+!.yarn/plugins              # 排除 Yarn 插件文件
+!.yarn/releases             # 排除 Yarn 发布文件
+!.yarn/sdks                 # 排除 Yarn SDK 文件
+!.yarn/versions             # 排除 Yarn 版本文件
+
+# Unity 相关 (Unity specific)
+######################
+/Library/                   # Unity: 忽略 Library 目录 (包含缓存和临时文件)
+/Temp/                      # Unity: 忽略 Temp 目录 (包含临时文件)
+/Obj/                       # Unity: 忽略 Obj 目录 (包含编译后的对象文件)
+/Build/                     # Unity: 忽略 Build 目录 (包含构建后的文件)
+/Builds/                    # Unity: 忽略 Builds 目录 (包含构建后的文件)
+*.csproj                   # Unity: 忽略 C# 项目文件
+*.unityproj                # Unity: 忽略 Unity 项目文件
+*.sln                      # Unity: 忽略解决方案文件
+*.unity                    # Unity: 忽略 Unity 场景文件 (文本格式)
+*.unity.meta               # Unity: 忽略 Unity 场景文件 (Meta 文件)
+*.mat                      # Unity: 忽略 Material 文件
+*.fbx                      # Unity: 忽略模型文件
+*.cubemap                  # Unity: 忽略 Cubemap 文件
+[Ll]og[Ss]/                  # Unity: 忽略 Log 目录
+MemoryCaptures/            # Unity: 忽略 MemoryCaptures 目录
+*.userprefs                # Unity: 忽略 User Preferences 文件
+*.asset                    # Unity: 忽略 Asset 文件
+!/Assets/StreamingAssets  # Unity: 避免忽略 StreamingAssets 文件夹
+!/Assets/StreamingAssets/* # Unity: 避免忽略 StreamingAssets 文件夹下的文件
+
+# Rust 相关 (Rust specific)
+######################
+/target/                    # Rust: 忽略 target 目录 (包含编译后的文件)
+Cargo.lock                  # Rust: 不要忽略 Cargo.lock 文件 (依赖锁定文件，应该提交)
+*.rs.bk                    # Rust: 忽略 Rust 备份文件
+!/.cargo                    # 避免忽略 .cargo
+
+# Android Studio 特定忽略规则 (Android Studio Specific)
+######################
+*.iml                       # 忽略 IntelliJ IDEA Module 文件 (Android Studio 基于 IntelliJ IDEA)
+.gradle/                    # 忽略 Gradle 缓存目录
+/local.properties           # 忽略本地环境配置 (例如：SDK 路径)
+/.idea/caches/              # 忽略 IntelliJ IDEA 缓存目录
+/.idea/libraries/           # 忽略 IntelliJ IDEA 库目录
+/.idea/modules.xml          # 忽略 IntelliJ IDEA 模块配置文件
+/.idea/workspace.xml        # 忽略 IntelliJ IDEA 工作区配置文件 (本地历史记录)
+/.idea/navEditor.xml        # 忽略 IntelliJ IDEA 的导航编辑器配置
+/build/                     # 忽略 Android build 目录 (包含编译后的 APK)
+/captures/                  # 忽略 Android Studio 截图目录
+
+# 特定的要排除的文件或目录 (Specific files or directories you want to exclude)
+######################

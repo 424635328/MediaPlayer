@@ -1,0 +1,14 @@
+prefix=/home/ubuntu2204/workspace/ffmpeg/lib_ffmpeg
+exec_prefix=${prefix}
+libdir=/home/ubuntu2204/workspace/ffmpeg/lib_ffmpeg/lib
+includedir=/home/ubuntu2204/workspace/ffmpeg/lib_ffmpeg/include
+
+Name: libavcodec
+Description: FFmpeg codec library
+Version: 58.134.100
+Requires: libswresample >= 3.9.100, libavutil >= 56.70.100
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavcodec -pthread -lm -latomic -lz
+Libs.private: 
+Cflags: -I${includedir}

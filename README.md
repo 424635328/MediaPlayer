@@ -51,9 +51,9 @@
 ## 编译和运行
 
 1.  **环境准备:** 确保已安装 Android SDK 和 NDK，并正确配置环境变量。
-2.  **克隆项目:**  `git clone [https://github.com/424635328/MediaPlayer]`  (请替换为实际仓库地址)
+2.  **克隆项目:**  `git clone https://github.com/424635328/MediaPlayer`
 3.  **导入项目:** 使用 Android Studio 打开项目，选择项目根目录下的 `settings.gradle` 文件。
-4.  **NDK 配置 (可选):** 如果 Android Studio 未自动检测到 NDK 路径，请在 `local.properties` 文件中手动配置 `ndk.dir` 属性。 例如: `ndk.dir=/path/to/your/ndk`
+4.  **NDK 配置:** 如果 Android Studio 未自动检测到 NDK 路径，请在 `local.properties` 文件中手动配置 `ndk.dir` 属性。 例如: `ndk.dir=/path/to/your/ndk`
 5.  **构建项目:**  在 Android Studio 中选择 "Build" -> "Make Project" 或 "Build" -> "Rebuild Project"。
 6.  **运行应用:**  连接 Android 设备或启动模拟器，然后选择 "Run" -> "Run 'app'"。
 

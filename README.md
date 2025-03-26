@@ -1,82 +1,113 @@
-# Android 视频播放器应用
+# Android 视频播放器 - 高性能定制化多媒体体验
 
 ## 项目简介
 
-本项目是一个基于 Android 平台的视频播放器应用，旨在提供高效、稳定、可定制的多媒体播放体验。 应用利用 FFmpeg 库进行视频解码，并使用 OpenSL ES 实现音频播放。 通过 ANativeWindow 将 YUV 视频渲染到 SurfaceView，实现了包括播放速度控制、暂停/恢复功能以及音视频同步等特性。
+本项目是一个基于 Android 平台的视频播放器应用，旨在提供 **高效、稳定、可定制** 的多媒体播放体验。  通过 **FFmpeg** 实现强大的视频解码能力，利用 **OpenSL ES** 提供低延迟音频播放，并使用 **ANativeWindow** 将 YUV 视频帧高效渲染到 **SurfaceView**。  应用具备 **播放速度控制、暂停/恢复、音视频同步** 等核心特性。
 
-本项目采用 C++ 和 JNI 进行原生开发，以实现性能关键型任务，从而打造高效且可定制的多媒体体验。
+核心性能部分采用 **C++** 和 **JNI** 进行原生开发，充分发挥硬件性能，打造流畅、可定制的播放体验。
 
-## 主要特性
+## 核心特性
 
-*   **跨平台支持:**  Android
-*   **多种视频格式支持:** 利用 FFmpeg 进行视频解码，支持多种常见的视频格式。
-*   **低延迟音频播放:** 使用 OpenSL ES 实现低延迟的音频播放。
-*   **高效视频渲染:** 采用 ANativeWindow 将 YUV 帧直接渲染到 SurfaceView，优化了视频显示效率。
-*   **播放速度控制:** 支持调整播放速度，例如快进。
-*   **暂停/恢复功能:** 支持暂停和恢复播放。
-*   **音视频同步:** 确保音频和视频同步播放。
-*   **原生代码优化:** 使用 C++ 实现性能关键型任务，例如视频解码和 YUV 渲染。
-*   **并发处理:** 使用 ExecutorService 管理并发任务，避免阻塞主 UI 线程，保持响应式的用户体验。
-*   **错误处理:**  提供基本的错误处理机制，增强应用的健壮性。
+*   **平台:** Android
+*   **广泛的视频格式支持:**  得益于 FFmpeg，支持绝大多数常见的视频格式。
+*   **低延迟音频:**  通过 OpenSL ES 实现快速响应的音频播放。
+*   **高效视频渲染:**  利用 ANativeWindow 直接将 YUV 帧渲染到 SurfaceView，大幅提升渲染效率。
+*   **灵活的播放控制:**
+    *   **速度调节:**  支持自定义播放速度，包括快进和慢放。
+    *   **基础控制:**  提供标准的暂停、恢复播放功能。
+*   **卓越的音视频同步:**  保证音视频完美同步，带来最佳观看体验。
+*   **原生代码性能优化:**
+    *   **C++ 实现:** 核心的视频解码、音频处理和 YUV 渲染等模块采用 C++ 编写。
+    *   **JNI 桥接:** 通过 JNI 实现 Java 和 C++ 代码的无缝交互。
+*   **并发处理机制:** 使用 ExecutorService 管理并发任务，避免阻塞主线程，确保 UI 的流畅响应。
+*   **健壮的错误处理:** 完善的错误处理机制，提高应用的稳定性和可靠性。
 
 ## 技术栈
 
-*   **Java:**  用于 UI 和应用逻辑的开发。
-*   **C++:**  用于性能关键的音视频解码和处理。
-*   **FFmpeg:**  用于视频解码，将各种视频格式解码为 YUV 格式。
-*   **OpenSL ES:**  用于低延迟的音频播放。
-*   **ANativeWindow:**  用于将 YUV 视频帧直接渲染到 SurfaceView。
-*   **JNI (Java Native Interface):**  用于在 Java 代码和 C++ 代码之间进行桥接。
-*   **SurfaceView:**  用于显示视频画面。
-*   **ExecutorService:**  用于管理并发任务。
+*   **Java:**  UI 界面和应用逻辑开发。
+*   **C++:**  性能敏感的音视频解码和处理。
+*   **FFmpeg:**  强大的多媒体框架，负责将各种视频格式解码为 YUV 数据。
+*   **OpenSL ES:**  Android 平台上的原生音频 API，用于低延迟音频播放。
+*   **ANativeWindow:**  Android NDK 提供的窗口接口，用于直接渲染 YUV 视频帧到 SurfaceView。
+*   **JNI (Java Native Interface):**  Java 代码和 C++ 代码之间的桥梁。
+*   **SurfaceView:**  用于显示视频画面的视图组件。
+*   **ExecutorService:**  线程池，用于管理并发任务。
 
 ## 项目结构
 
-├── app/ # Android 应用代码
-
-│ ├── src/ # 源代码
-
-│ │ ├── main/ # 主要代码
-
-│ │ │ ├── java/ # Java 代码
-
-│ │ │ ├── cpp/ # C++ 代码 (JNI)
-
-│ │ │ ├── res/ # 资源文件 (布局、图片等)
-
-│ ├── build.gradle # Gradle 构建文件
-
-├── gradle/ # Gradle 相关文件
-
-├── gradlew # Gradle 包装器
-
-└── settings.gradle # 项目设置
-
+```
+├── app/                    # Android 应用代码
+│   ├── src/               # 源代码
+│   │   ├── main/          # 主要代码
+│   │   │   ├── java/      # Java 代码
+│   │   │   ├── cpp/       # C++ 代码 (JNI)
+│   │   │   ├── res/       # 资源文件 (布局、图片等)
+│   ├── build.gradle        # Gradle 构建文件
+├── gradle/                 # Gradle 相关文件
+├── gradlew                 # Gradle 包装器
+└── settings.gradle       # 项目设置
+```
 
 ## 编译和运行
 
-1.  **安装 Android SDK 和 NDK:**  确保你已经安装了 Android SDK 和 NDK，并配置好了环境变量。
-2.  **克隆代码:**  `[git clone https://github.com/424635328/MediaPlayer]`
-3.  **使用 Android Studio 打开项目:**  在 Android Studio 中选择 "Open an existing Android Studio project"，然后选择项目根目录下的 `settings.gradle` 文件。
-4.  **配置 NDK 路径 (如果需要):**  如果 Android Studio 没有自动检测到 NDK 路径，你需要在 `local.properties` 文件中手动配置 `ndk.dir` 属性。
-5.  **构建项目:**  在 Android Studio 中点击 "Build" -> "Make Project" 或者 "Build" -> "Rebuild Project"。
-6.  **运行项目:**  连接 Android 设备或启动模拟器，然后点击 "Run" -> "Run 'app'"。
+1.  **环境准备:** 确保已安装 Android SDK 和 NDK，并正确配置环境变量。
+2.  **克隆项目:**  `git clone [https://github.com/424635328/MediaPlayer]`  (请替换为实际仓库地址)
+3.  **导入项目:** 使用 Android Studio 打开项目，选择项目根目录下的 `settings.gradle` 文件。
+4.  **NDK 配置 (可选):** 如果 Android Studio 未自动检测到 NDK 路径，请在 `local.properties` 文件中手动配置 `ndk.dir` 属性。 例如: `ndk.dir=/path/to/your/ndk`
+5.  **构建项目:**  在 Android Studio 中选择 "Build" -> "Make Project" 或 "Build" -> "Rebuild Project"。
+6.  **运行应用:**  连接 Android 设备或启动模拟器，然后选择 "Run" -> "Run 'app'"。
 
 ## 使用说明
 
-1.  **打开应用:**  在 Android 设备或模拟器上打开应用。
-2.  **选择视频文件:**  点击 "选择文件" 按钮，选择要播放的视频文件。
-3.  **播放控制:**  使用播放、暂停、恢复、快进等按钮进行播放控制。
-4.  **调整播放速度:**  使用播放速度控制滑块调整播放速度。
+1.  **启动应用:** 在 Android 设备或模拟器上打开应用。
+2.  **选择视频:** 点击 "选择文件" 按钮，浏览并选择要播放的视频文件。
+3.  **控制播放:** 使用提供的播放、暂停、恢复、快进等控件进行播放控制。
+4.  **调整速度:**  拖动播放速度滑块，调整播放速度。
 
-## 贡献
+## 常见问题及解决方案 (Troubleshooting)
 
-欢迎大家参与本项目，贡献代码、提交 bug 报告、提出建议。
+*   **应用崩溃/闪退：**
+    *   **原因：** 可能由于视频格式不支持、解码失败、内存溢出或其他未知错误导致。
+    *   **解决方案：**
+        *   **检查视频格式：** 确认视频格式是否在支持范围内（例如：MP4, AVI, MKV）。尝试使用不同的视频文件进行测试。
+        *   **查看 Logcat 日志：** 使用 Android Studio 的 Logcat 工具查看错误日志，寻找崩溃原因。重点关注 C++ 代码和 JNI 相关的错误信息。
+        *   **清理缓存：** 清理应用缓存，释放内存资源。
+        *   **重新编译：** 尝试重新编译项目，确保代码和依赖库版本正确。
+        *   **检查 NDK 版本：** 确认 NDK 版本与项目兼容。过高或过低的 NDK 版本可能导致编译和运行问题。
+*   **视频无法播放/花屏：**
+    *   **原因：** FFmpeg 解码器可能不支持该视频的编码格式，或者 YUV 渲染出现问题。
+    *   **解决方案：**
+        *   **更换视频文件：** 尝试播放其他视频文件，判断是否是视频文件本身的问题。
+        *   **检查 FFmpeg 配置：** 确认 FFmpeg 库已正确集成，并且包含了需要的解码器。
+        *   **检查 SurfaceView：** 检查 SurfaceView 是否正确初始化，并且大小设置是否正确。
+        *   **检查 YUV 渲染代码：** 检查 C++ 代码中 YUV 渲染部分是否存在错误。
+*   **音频播放异常：**
+    *   **原因：** OpenSL ES 初始化失败，或者音频解码出现问题。
+    *   **解决方案：**
+        *   **检查 OpenSL ES 初始化代码：** 确认 OpenSL ES 引擎和播放器对象已正确创建和初始化。
+        *   **检查音频解码：** 查看 Logcat 日志，确认音频解码过程中是否存在错误。
+        *   **检查权限：** 确认应用已获取音频录制权限 (虽然播放不需要录制权限，但某些设备上没有权限会导致初始化失败)。
+*   **JNI 相关错误：**
+    *   **原因：** Java 代码调用 C++ 代码时出现错误，例如方法签名不匹配，或者 C++ 代码崩溃。
+    *   **解决方案：**
+        *   **检查 JNI 方法签名：** 确认 Java 代码中声明的 native 方法签名与 C++ 代码中的方法签名完全一致。
+        *   **使用 `javah` 生成头文件：** 使用 `javah` 命令生成 C++ 头文件，避免手动编写方法签名时出错。
+        *   **调试 C++ 代码：** 使用 Android Studio 的调试器调试 C++ 代码，查找崩溃原因。
+
+**一般调试技巧：**
+
+*   **Logcat 日志：** 始终关注 Android Studio 的 Logcat 日志，它是解决问题的关键。
+*   **断点调试：** 使用 Android Studio 的调试器，在 Java 和 C++ 代码中设置断点，逐步调试代码。
+*   **Google 搜索：** 将错误信息复制到 Google 搜索，查找相关的解决方案。
+
+## 贡献指南
+
+欢迎参与本项目，贡献代码、提交问题报告或提出改进建议。
 
 ## 许可证
 
-本项目采用 MIT License 授权。 有关详细信息，请参阅 [LICENSE](LICENSE) 文件。
+本项目使用 MIT License 开源协议。 详情请参考 [LICENSE](LICENSE) 文件。
 
 ## 联系方式
 
-MiracleHcat@gmail.com
+[MiracleHcat@gmail.com](mailto:MiracleHcat@gmail.com)

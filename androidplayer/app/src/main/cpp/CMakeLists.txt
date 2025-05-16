@@ -48,11 +48,10 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
         ${log-lib}
         ${android-lib}
         ${nativewindow-lib}
-        ${aaudio-lib}           # <--- 使用找到的 aaudio 库变量
-        ${opensles-lib}         # <--- 新增：链接 OpenSLES 库
+        ${aaudio-lib}
+        ${opensles-lib}
 
-        # 其他标准库，可以直接写名字 (CMake 会自动处理 -l 前缀)
-        # 或者像上面那样用 find_library (更推荐)
+
         atomic                  # 对应 -latomic
         m                       # 对应 -lm
 )

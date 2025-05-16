@@ -23,86 +23,90 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+// 主活动类，实现SurfaceHolder.Callback接口以处理SurfaceView的生命周期事件
 public class MainActivity extends AppCompatActivity implements SurfaceHolder.Callback {
 
-    private static final String TAG = "MainActivity";
-    private static final String INPUT_FILE_NAME = "1.mp4"; // 将你的测试视频放在 app/src/main/assets
-    private static final String YUV_FILE_NAME = "output.yuv";
+    private static final String TAG = "MainActivity"; // 日志标签
+    private static final String INPUT_FILE_NAME = "1.mp4"; // 输入视频文件名 (assets目录)
+    private static final String YUV_FILE_NAME = "output.yuv"; // 解码后的YUV文件名
 
-    private SurfaceView surfaceView;
-    private SurfaceHolder surfaceHolder;
-    private Button playPauseButton, stopButton, speedButton;
-    private SeekBar seekBar;
-    private TextView speedTextView;
+    private SurfaceView surfaceView; // 用于显示视频的视图
+    private SurfaceHolder surfaceHolder; // SurfaceView的控制器
+    private Button playPauseButton, stopButton, speedButton; // 控制按钮
+    private SeekBar seekBar; // 播放进度条
+    private TextView speedTextView; // 显示播放速度的文本
 
-    private ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor();
-    private Handler mainUIHandler = new Handler(Looper.getMainLooper());
+    private ExecutorService backgroundExecutor = Executors.newSingleThreadExecutor(); // 用于后台任务的线程池
+    private Handler mainUIHandler = new Handler(Looper.getMainLooper()); // 用于在主线程更新UI
 
-    private String mp4FilePath;
-    private String yuvFilePath;
+    private String mp4FilePath; // MP4文件在缓存中的绝对路径
+    private String yuvFilePath; // YUV文件在缓存中的绝对路径
 
+    // 播放器状态枚举
     private enum PlayerState { IDLE, PREPARING, PLAYING, PAUSED, STOPPED, ERROR }
-    private PlayerState currentPlayerState = PlayerState.IDLE;
-    private float currentSpeed = 1.0f;
-    private boolean isSurfaceReady = false;
-    private boolean isYuvDecoded = false;
-    private AtomicBoolean isSeekingFromUser = new AtomicBoolean(false);
+    private PlayerState currentPlayerState = PlayerState.IDLE; // 当前播放器状态
+    private float currentSpeed = 1.0f; // 当前播放速度
+    private boolean isSurfaceReady = false; // Surface是否已准备好
+    private boolean isYuvDecoded = false; // YUV文件是否已解码完成
+    private AtomicBoolean isSeekingFromUser = new AtomicBoolean(false); // 用户是否正在拖动进度条
 
-    private double videoFrameRate = 25.0; // 解码后会更新
-    private long pendingAudioSeekMs = -1; // 用于停止状态下seek后，记录音频应开始的时间
+    private double videoFrameRate = 25.0; // 视频帧率
+    private long pendingAudioSeekMs = -1; // 待处理的音频跳转时间点 (毫秒)
 
-    private static final int PROGRESS_UPDATE_INTERVAL_MS = 200; // 进度条更新间隔
+    private static final int PROGRESS_UPDATE_INTERVAL_MS = 200; // 进度条更新间隔 (毫秒)
 
+    // 静态代码块，加载本地C++库
     static {
         try {
-            System.loadLibrary("androidplayer");
+            System.loadLibrary("androidplayer"); // 加载名为 "androidplayer" 的库
             Log.i(TAG, "Native library 'androidplayer' loaded successfully.");
         } catch (UnsatisfiedLinkError e) {
             Log.e(TAG, "Failed to load native library 'androidplayer'", e);
         }
     }
 
-    // Native methods
-    private native int decodeVideoToFile(String inputFilePath, String outputFilePath);
-    private native void nativeStartVideoPlayback(String yuvFilePath, Surface surface);
-    private native void nativeStopVideoPlayback();
-    private native void nativePauseVideo();
-    private native void nativeResumeVideo();
-    private native void nativeSetSpeed(float speed);
-    private native void nativeSeekToFrame(int frameNum);
-    private native int nativeGetTotalFrames(String yuvFilePath);
-    private native int nativeGetCurrentFrame();
-    private native double nativeGetFrameRate(); // 新增：获取帧率
+    // --- JNI本地方法声明 ---
+    private native int decodeVideoToFile(String inputFilePath, String outputFilePath); // 解码视频到YUV文件
+    private native void nativeStartVideoPlayback(String yuvFilePath, Surface surface); // 开始本地视频播放
+    private native void nativeStopVideoPlayback(); // 停止本地视频播放
+    private native void nativePauseVideo(); // 暂停本地视频
+    private native void nativeResumeVideo(); // 恢复本地视频
+    private native void nativeSetSpeed(float speed); // 设置视频播放速度 (影响帧延迟)
+    private native void nativeSeekToFrame(int frameNum); // 视频跳转到指定帧
+    private native int nativeGetTotalFrames(String yuvFilePath); // 获取视频总帧数
+    private native int nativeGetCurrentFrame(); // 获取当前视频帧
+    private native double nativeGetFrameRate(); // 获取视频帧率
 
-    private native int initAudio(String inputFilePath);
-    private native void startAudio(String inputFilePath, long startOffsetMs); // 修改：增加startOffsetMs参数
-    private native void stopAudio();
-    private native void pauseAudio(boolean pause);
-    private native void nativeSeekAudioToTimestamp(long timeMs); // 新增：音频Seek
+    private native int initAudio(String inputFilePath); // 初始化音频
+    private native void startAudio(String inputFilePath, long startOffsetMs); // 开始播放音频
+    private native void stopAudio(); // 停止播放音频
+    private native void pauseAudio(boolean pause); // 暂停/恢复音频
+    private native void nativeSeekAudioToTimestamp(long timeMs); // 音频跳转到指定时间戳
+    private native void nativeSetAudioPlaybackRate(float rate); // 设置音频播放速率
 
-
+    // 更新播放进度的Runnable
     private final Runnable progressUpdater = new Runnable() {
         @Override
         public void run() {
+            // 仅在播放或暂停状态且用户未拖动进度条时更新
             if ((currentPlayerState == PlayerState.PLAYING || currentPlayerState == PlayerState.PAUSED) && !isSeekingFromUser.get()) {
-                int currentFrame = nativeGetCurrentFrame();
+                int currentFrame = nativeGetCurrentFrame(); // 获取当前帧
                 if (seekBar != null) {
-                    int totalFrames = seekBar.getMax();
+                    int totalFrames = seekBar.getMax(); // 获取总帧数
                     if (totalFrames > 0) {
-                        // 只有当用户没有拖动SeekBar时才更新，避免冲突
-                        if (!isSeekingFromUser.get()) {
-                            seekBar.setProgress(currentFrame);
+                        if (!isSeekingFromUser.get()) { // 再次检查用户是否在拖动
+                            seekBar.setProgress(currentFrame); // 更新进度条
                         }
-                        // 检查是否播放到接近末尾
+                        // 如果接近视频末尾，则认为播放结束
                         if (currentFrame >= totalFrames - 2 && currentPlayerState == PlayerState.PLAYING && totalFrames > 1) {
                             Log.i(TAG, "Video playback likely finished based on frame count.");
-                            handleStop();
+                            handleStop(); // 处理停止逻辑
                             return;
                         }
                     }
                 }
             }
-            // 只有在播放或暂停状态下才继续调度
+            // 如果仍在播放或暂停，则延迟一段时间后再次执行
             if (currentPlayerState == PlayerState.PLAYING || currentPlayerState == PlayerState.PAUSED) {
                 mainUIHandler.postDelayed(this, PROGRESS_UPDATE_INTERVAL_MS);
             }
@@ -113,16 +117,18 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        String packageName = getPackageName();
+        String packageName = getPackageName(); // 获取包名
+        // 通过资源名动态获取布局ID
         int layoutId = getResources().getIdentifier("activity_main", "layout", packageName);
         if (layoutId == 0) {
-            Log.e(TAG, "Failed to find layout: activity_main. Check XML file name and build.");
+            Log.e(TAG, "Failed to find layout: activity_main.");
             Toast.makeText(this, "Error: Layout resource not found!", Toast.LENGTH_LONG).show();
             finish();
             return;
         }
-        setContentView(layoutId);
+        setContentView(layoutId); // 设置布局
 
+        // 通过资源名动态获取UI组件ID并初始化
         surfaceView = findViewById(getResources().getIdentifier("surfaceView", "id", packageName));
         playPauseButton = findViewById(getResources().getIdentifier("playPauseButton", "id", packageName));
         stopButton = findViewById(getResources().getIdentifier("stopButton", "id", packageName));
@@ -130,183 +136,180 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         seekBar = findViewById(getResources().getIdentifier("seekBar", "id", packageName));
         speedTextView = findViewById(getResources().getIdentifier("speedText", "id", packageName));
 
+        // 检查关键UI组件是否成功获取
         if (surfaceView == null || playPauseButton == null || stopButton == null ||
                 speedButton == null || seekBar == null || speedTextView == null) {
-            String missingViews = "";
-            if (surfaceView == null) missingViews += "surfaceView ";
-            if (playPauseButton == null) missingViews += "playPauseButton ";
-            if (stopButton == null) missingViews += "stopButton ";
-            if (speedButton == null) missingViews += "speedButton ";
-            if (seekBar == null) missingViews += "seekBar ";
-            if (speedTextView == null) missingViews += "speedTextView ";
-            Log.e(TAG, "Critical UI element(s) not found: " + missingViews.trim() +
-                    ". Ensure IDs in XML match strings used in getIdentifier().");
-            Toast.makeText(this, "Error: UI elements not found: " + missingViews.trim(), Toast.LENGTH_LONG).show();
+            Log.e(TAG, "Critical UI element(s) not found. Check IDs.");
+            Toast.makeText(this, "Error: UI elements not found.", Toast.LENGTH_LONG).show();
             finish();
             return;
         }
 
-        surfaceHolder = surfaceView.getHolder();
-        surfaceHolder.addCallback(this);
+        surfaceHolder = surfaceView.getHolder(); // 获取SurfaceHolder
+        surfaceHolder.addCallback(this); // 添加Surface生命周期回调
 
-        updateUIForState(PlayerState.IDLE);
+        updateUIForState(PlayerState.IDLE); // 初始化UI状态
 
+        // 设置按钮点击监听器
         playPauseButton.setOnClickListener(v -> handlePlayPause());
         stopButton.setOnClickListener(v -> handleStop());
         speedButton.setOnClickListener(v -> handleSpeedToggle());
 
+        // 设置SeekBar监听器
         seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            int targetFrameOnSeek = 0;
+            int targetFrameOnSeek = 0; // 用户拖动进度条时的目标帧
             @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser) {
+            public void onProgressChanged(SeekBar seekBarParam, int progress, boolean fromUser) {
+                if (fromUser) { // 如果是用户改变的进度
                     targetFrameOnSeek = progress;
                 }
             }
             @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-                // 允许在IDLE, STOPPED, PLAYING, PAUSED 状态下开始拖动 (前提是已解码)
+            public void onStartTrackingTouch(SeekBar seekBarParam) { // 开始拖动进度条
+                // 仅当YUV解码完成且播放器处于可跳转状态时
                 if (isYuvDecoded && (currentPlayerState == PlayerState.PLAYING || currentPlayerState == PlayerState.PAUSED || currentPlayerState == PlayerState.IDLE || currentPlayerState == PlayerState.STOPPED)) {
-                    isSeekingFromUser.set(true);
-                    // 如果正在播放或暂停，暂时移除进度更新回调，避免冲突
+                    isSeekingFromUser.set(true); // 标记用户正在拖动
                     if (currentPlayerState == PlayerState.PLAYING || currentPlayerState == PlayerState.PAUSED) {
-                        mainUIHandler.removeCallbacks(progressUpdater);
+                        mainUIHandler.removeCallbacks(progressUpdater); // 暂停进度更新
                     }
                 }
             }
             @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-                if (!isYuvDecoded) { // 如果还没解码完，则不响应seek
+            public void onStopTrackingTouch(SeekBar seekBarParam) { // 停止拖动进度条
+                if (!isYuvDecoded) { // 如果YUV未解码，则不处理
                     isSeekingFromUser.set(false);
                     return;
                 }
-                if (!isSeekingFromUser.get()) { // 如果不是用户主动seek（例如代码设置进度），则忽略
+                if (!isSeekingFromUser.get()) { // 如果不是用户拖动结束，则不处理
                     return;
                 }
 
                 Log.i(TAG, "SeekBar seeking to frame: " + targetFrameOnSeek);
-                long targetTimeMs = 0;
-                if (videoFrameRate > 0.001) { // 确保帧率有效
+                long targetTimeMs = 0; // 计算音频跳转的目标时间
+                if (videoFrameRate > 0.001) {
                     targetTimeMs = (long) (((double) targetFrameOnSeek / videoFrameRate) * 1000.0);
                 } else {
-                    Log.w(TAG, "Cannot calculate target time for audio seek: frame rate is invalid ("+ videoFrameRate +"). Defaulting audio seek to 0 or no seek.");
-                    targetTimeMs = -1; // 表示不进行有效的音频seek，或者native层处理为从头
+                    Log.w(TAG, "Cannot calculate target time for audio seek: frame rate is invalid ("+ videoFrameRate +").");
+                    targetTimeMs = -1; // 帧率无效则不进行音频跳转
                 }
 
+                // 根据当前播放状态处理跳转逻辑
                 if (currentPlayerState == PlayerState.PLAYING || currentPlayerState == PlayerState.PAUSED) {
-                    boolean wasPlaying = (currentPlayerState == PlayerState.PLAYING);
+                    boolean wasPlaying = (currentPlayerState == PlayerState.PLAYING); // 记录跳转前是否在播放
 
-                    if (wasPlaying) { // 如果正在播放，先暂停内部逻辑（不更新UI为PAUSED）
-                        nativePauseVideo(); // 仅设置C++层暂停标志
-                        pauseAudio(true);   // OpenSL ES 暂停
+                    if (wasPlaying) { // 如果在播放，先暂停
+                        nativePauseVideo();
+                        pauseAudio(true);
                     }
 
-                    // Seek 视频
-                    nativeSeekToFrame(targetFrameOnSeek);
-                    // Seek 音频
-                    if (targetTimeMs >= 0) { // 确保时间有效
-                        nativeSeekAudioToTimestamp(targetTimeMs);
+                    nativeSeekToFrame(targetFrameOnSeek); // 跳转视频帧
+                    if (targetTimeMs >= 0) {
+                        nativeSeekAudioToTimestamp(targetTimeMs); // 跳转音频时间
                     } else {
                         Log.w(TAG, "Skipping audio seek due to invalid targetTimeMs.");
                     }
 
-                    // 更新当前帧的UI显示 (进度条)
-                    if (seekBar != null) seekBar.setProgress(targetFrameOnSeek); // 立刻更新UI上的进度条
-
-
-                    if (wasPlaying) { // 如果之前是播放状态，则恢复播放
-                        nativeResumeVideo(); // C++层恢复
-                        pauseAudio(false);  // OpenSL ES 恢复
+                    if (MainActivity.this.seekBar != null) { // 更新进度条显示
+                        MainActivity.this.seekBar.setProgress(targetFrameOnSeek);
                     }
-                    // 如果是暂停时seek，不需要做额外操作，因为nativeSeekAudioToTimestamp会处理，并且保持暂停状态
-                } else { // STOPPED, IDLE, ERROR (这些状态下，下次播放时会从新位置开始)
-                    nativeSeekToFrame(targetFrameOnSeek); // 视频会在下次start时seek到目标帧（通过render loop的seek机制）
-                    pendingAudioSeekMs = targetTimeMs;    // 音频会在下次startAudio时从这个时间点开始
-                    if (seekBar != null) seekBar.setProgress(targetFrameOnSeek); // 更新UI显示
+
+                    if (wasPlaying) { // 如果之前在播放，则恢复播放
+                        nativeResumeVideo();
+                        pauseAudio(false);
+                    }
+                } else { // 如果是IDLE或STOPPED状态，则只记录跳转位置供下次播放使用
+                    nativeSeekToFrame(targetFrameOnSeek);
+                    pendingAudioSeekMs = targetTimeMs; // 记录音频待跳转时间
+                    if (MainActivity.this.seekBar != null) {
+                        MainActivity.this.seekBar.setProgress(targetFrameOnSeek);
+                    }
                 }
 
-                isSeekingFromUser.set(false);
-                // 无论如何，在seek结束后，如果播放器处于活动状态，重新启动进度更新器
+                isSeekingFromUser.set(false); // 清除用户拖动标记
                 if (currentPlayerState == PlayerState.PLAYING || currentPlayerState == PlayerState.PAUSED) {
-                    mainUIHandler.removeCallbacks(progressUpdater); // 先移除，确保只有一个实例
-                    mainUIHandler.post(progressUpdater); // 重新启动进度更新器
+                    mainUIHandler.removeCallbacks(progressUpdater); // 重新开始进度更新
+                    mainUIHandler.post(progressUpdater);
                 }
             }
         });
 
-        prepareMediaInBackground();
+        prepareMediaInBackground(); // 在后台准备媒体文件 (拷贝和解码)
     }
 
+    // 在后台准备媒体文件 (拷贝assets中的MP4到缓存，然后解码为YUV)
     private void prepareMediaInBackground() {
-        updateUIForState(PlayerState.PREPARING);
-        backgroundExecutor.submit(() -> {
+        updateUIForState(PlayerState.PREPARING); // 更新UI为准备状态
+        backgroundExecutor.submit(() -> { // 提交到后台线程执行
             try {
-                File copiedMp4File = copyAssetToCacheDir(INPUT_FILE_NAME);
+                File copiedMp4File = copyAssetToCacheDir(INPUT_FILE_NAME); // 拷贝MP4
                 mp4FilePath = copiedMp4File.getAbsolutePath();
 
-                File yuvOutputFile = new File(getCacheDir(), YUV_FILE_NAME);
+                File yuvOutputFile = new File(getCacheDir(), YUV_FILE_NAME); // 创建YUV输出文件对象
                 yuvFilePath = yuvOutputFile.getAbsolutePath();
 
                 Log.i(TAG, "Starting YUV decoding from " + mp4FilePath + " to " + yuvFilePath);
-                int decodeResult = decodeVideoToFile(mp4FilePath, yuvFilePath);
+                int decodeResult = decodeVideoToFile(mp4FilePath, yuvFilePath); // 调用JNI解码
 
-                if (decodeResult == 0) {
+                if (decodeResult == 0) { // 解码成功
                     isYuvDecoded = true;
-                    videoFrameRate = nativeGetFrameRate(); // 获取帧率
-                    if (videoFrameRate <= 0.001) { // 做个保护
+                    videoFrameRate = nativeGetFrameRate(); // 获取视频帧率
+                    if (videoFrameRate <= 0.001) { // 帧率无效则使用默认值
                         Log.w(TAG, "Invalid frame rate from native: " + videoFrameRate + ", using default 25.0");
                         videoFrameRate = 25.0;
                     }
                     Log.i(TAG, "YUV decoding successful. Video Frame Rate: " + videoFrameRate);
-                    mainUIHandler.post(() -> {
+                    mainUIHandler.post(() -> { // 在主线程更新UI
                         if (seekBar != null) {
-                            int totalFrames = nativeGetTotalFrames(yuvFilePath);
-                            seekBar.setMax(totalFrames > 0 ? totalFrames : 1); // 避免除以0
-                            seekBar.setProgress(0);
+                            int totalFrames = nativeGetTotalFrames(yuvFilePath); // 获取总帧数
+                            seekBar.setMax(totalFrames > 0 ? totalFrames : 1); // 设置进度条最大值
+                            seekBar.setProgress(0); // 设置进度条初始值为0
                         }
-                        if (isSurfaceReady) {
-                            updateUIForState(PlayerState.IDLE);
+                        if (isSurfaceReady) { // 如果Surface已准备好
+                            updateUIForState(PlayerState.IDLE); // 更新UI为IDLE状态
                         } else {
                             Toast.makeText(this, "Video decoded, waiting for surface...", Toast.LENGTH_SHORT).show();
                         }
                     });
-                } else {
+                } else { // 解码失败
                     Log.e(TAG, "YUV decoding failed, code: " + decodeResult);
-                    mainUIHandler.post(() -> updateUIForState(PlayerState.ERROR));
+                    mainUIHandler.post(() -> updateUIForState(PlayerState.ERROR)); // 更新UI为错误状态
                 }
-            } catch (IOException e) {
+            } catch (IOException e) { // 文件操作异常
                 Log.e(TAG, "Error preparing media files", e);
                 mainUIHandler.post(() -> updateUIForState(PlayerState.ERROR));
             }
         });
     }
 
+    // 处理播放/暂停按钮点击事件
     private void handlePlayPause() {
-        if (!isYuvDecoded) {
+        if (!isYuvDecoded) { // 如果YUV未解码
             Toast.makeText(this, "Video not yet decoded.", Toast.LENGTH_SHORT).show();
-            if(currentPlayerState != PlayerState.PREPARING) prepareMediaInBackground();
+            if(currentPlayerState != PlayerState.PREPARING) prepareMediaInBackground(); // 重新准备
             return;
         }
-        if (!isSurfaceReady) {
+        if (!isSurfaceReady) { // 如果Surface未准备好
             Toast.makeText(this, "Surface not ready.", Toast.LENGTH_SHORT).show();
             return;
         }
+        // 检查Surface是否有效
         if (surfaceHolder == null || surfaceHolder.getSurface() == null || !surfaceHolder.getSurface().isValid()) {
             Log.e(TAG, "Surface is not valid for playback.");
             Toast.makeText(this, "Surface invalid, cannot play.", Toast.LENGTH_SHORT).show();
             return;
         }
 
+        // 根据当前状态执行相应操作
         switch (currentPlayerState) {
             case IDLE:
             case STOPPED:
-            case ERROR: // Retry can also start new playback
+            case ERROR: // 从空闲、停止或错误状态开始新的播放
                 startNewPlayback();
                 break;
-            case PLAYING:
+            case PLAYING: // 从播放状态暂停
                 pauseCurrentPlayback();
                 break;
-            case PAUSED:
+            case PAUSED: // 从暂停状态恢复播放
                 resumeCurrentPlayback();
                 break;
             default:
@@ -314,23 +317,25 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         }
     }
 
+    // 开始新的播放
     private void startNewPlayback() {
         Log.i(TAG, "Starting new playback...");
-        if (initAudio(mp4FilePath) == 0) {
-            // 使用 pendingAudioSeekMs，如果没有则为-1 (或0)，native层会处理
-            startAudio(mp4FilePath, pendingAudioSeekMs);
-            pendingAudioSeekMs = -1; // 用完后重置
+        if (initAudio(mp4FilePath) == 0) { // 初始化音频
+            startAudio(mp4FilePath, pendingAudioSeekMs); // 开始播放音频 (如有待处理的跳转)
+            pendingAudioSeekMs = -1; // 清除待处理的音频跳转
         } else {
-            Log.e(TAG, "Failed to initialize audio. Proceeding without audio.");
+            Log.e(TAG, "Failed to initialize audio.");
             Toast.makeText(this, "Audio init failed", Toast.LENGTH_SHORT).show();
         }
 
+        // 确保Surface有效
         if (surfaceHolder != null && surfaceHolder.getSurface() != null && surfaceHolder.getSurface().isValid()) {
-            // nativeSeekToFrame 应该在 onStopTrackingTouch 或 handleStop 中处理过了
-            // nativeStartVideoPlayback 会启动渲染线程，该线程会检查g_seek_target_frame
-            nativeStartVideoPlayback(yuvFilePath, surfaceHolder.getSurface());
-            updateUIForState(PlayerState.PLAYING);
-            mainUIHandler.removeCallbacks(progressUpdater); // 先移除，确保只有一个实例
+            nativeStartVideoPlayback(yuvFilePath, surfaceHolder.getSurface()); // 开始视频播放
+            nativeSetSpeed(currentSpeed); // 应用当前速度到视频
+            nativeSetAudioPlaybackRate(currentSpeed); // 应用当前速度到音频
+
+            updateUIForState(PlayerState.PLAYING); // 更新UI为播放状态
+            mainUIHandler.removeCallbacks(progressUpdater); // 开始进度更新
             mainUIHandler.post(progressUpdater);
         } else {
             Log.e(TAG, "Cannot start playback, surface is not valid.");
@@ -339,81 +344,96 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         }
     }
 
+    // 暂停当前播放
     private void pauseCurrentPlayback() {
         if (currentPlayerState == PlayerState.PLAYING) {
-            nativePauseVideo();
-            pauseAudio(true);
-            updateUIForState(PlayerState.PAUSED);
-            mainUIHandler.removeCallbacks(progressUpdater); // 暂停时停止进度更新器
+            nativePauseVideo(); // 暂停视频
+            pauseAudio(true);  // 暂停音频
+            updateUIForState(PlayerState.PAUSED); // 更新UI为暂停状态
+            mainUIHandler.removeCallbacks(progressUpdater); // 停止进度更新
         }
     }
 
+    // 恢复当前播放
     private void resumeCurrentPlayback() {
         if (currentPlayerState == PlayerState.PAUSED) {
+            // 确保Surface有效
             if (isSurfaceReady && surfaceHolder != null && surfaceHolder.getSurface() != null && surfaceHolder.getSurface().isValid()) {
-                nativeResumeVideo();
-                pauseAudio(false);
-                updateUIForState(PlayerState.PLAYING);
-                mainUIHandler.removeCallbacks(progressUpdater); // 先移除
-                mainUIHandler.post(progressUpdater); // 恢复播放后，重新启动进度更新
+                nativeResumeVideo(); // 恢复视频
+                pauseAudio(false); // 恢复音频
+                updateUIForState(PlayerState.PLAYING); // 更新UI为播放状态
+                mainUIHandler.removeCallbacks(progressUpdater); // 重新开始进度更新
+                mainUIHandler.post(progressUpdater);
             } else {
                 Log.w(TAG, "Cannot resume: Surface not ready. Forcing stop.");
                 Toast.makeText(this, "Cannot resume: Surface not ready.", Toast.LENGTH_SHORT).show();
-                handleStop();
+                handleStop(); // 如果Surface无效，则停止播放
             }
         }
     }
 
+    // 处理停止按钮点击事件
     private void handleStop() {
         Log.i(TAG, "Stopping playback...");
-        nativeStopVideoPlayback();
-        stopAudio();
-        updateUIForState(PlayerState.STOPPED);
-        mainUIHandler.removeCallbacks(progressUpdater);
+        nativeStopVideoPlayback(); // 停止视频
+        stopAudio(); // 停止音频
+        currentSpeed = 1.0f; // 停止时重置速度为1.0x
+
+        updateUIForState(PlayerState.STOPPED); // 更新UI为停止状态
+        mainUIHandler.removeCallbacks(progressUpdater); // 停止进度更新
         if (seekBar != null) {
-            seekBar.setProgress(0); // 停止时进度条归零
+            seekBar.setProgress(0); // 重置进度条
         }
-        pendingAudioSeekMs = -1; // 清除任何待处理的音频seek
-        nativeSeekToFrame(0); // 请求视频也从头开始（如果下次播放）
+        pendingAudioSeekMs = -1; // 清除待处理的音频跳转
+        nativeSeekToFrame(0); // 视频跳转回第0帧
     }
 
+    // 处理速度切换按钮点击事件
     private void handleSpeedToggle() {
-        // 允许在播放或暂停时调整速度
+        // 仅在播放或暂停状态下允许改变速度
         if (!isYuvDecoded || (currentPlayerState != PlayerState.PLAYING && currentPlayerState != PlayerState.PAUSED)) {
             Toast.makeText(this, "Please start playback first to change speed.", Toast.LENGTH_SHORT).show();
             return;
         }
-        if (currentSpeed == 1.0f) currentSpeed = 1.5f;
-        else if (currentSpeed == 1.5f) currentSpeed = 2.0f;
-        else if (currentSpeed == 2.0f) currentSpeed = 0.5f;
-        else currentSpeed = 1.0f;
+        float newSpeed = currentSpeed; // 速度循环切换: 1.0 -> 1.5 -> 2.0 -> 0.5 -> 1.0
+        if (currentSpeed == 1.0f) newSpeed = 1.5f;
+        else if (currentSpeed == 1.5f) newSpeed = 2.0f;
+        else if (currentSpeed == 2.0f) newSpeed = 0.5f;
+        else newSpeed = 1.0f;
 
-        nativeSetSpeed(currentSpeed);
-        if (speedTextView != null) {
+        currentSpeed = newSpeed;
+
+        nativeSetSpeed(currentSpeed); // 设置视频速度
+        nativeSetAudioPlaybackRate(currentSpeed); // 设置音频速度
+
+        if (speedTextView != null) { // 更新速度显示文本
             mainUIHandler.post(() -> speedTextView.setText(String.format(Locale.US, "Speed: %.1fx", currentSpeed)));
         }
     }
 
+    // 根据播放器状态更新UI
     private void updateUIForState(PlayerState state) {
         currentPlayerState = state;
         Log.d(TAG, "Updating UI for state: " + state);
 
+        // 检查UI组件是否为空
         if (playPauseButton == null || stopButton == null || speedButton == null || seekBar == null || speedTextView == null) {
-            Log.e(TAG, "Cannot update UI, one or more view components are null.");
-            if (state == PlayerState.ERROR && playPauseButton != null) {
+            Log.e(TAG, "Cannot update UI, view components are null.");
+            if (state == PlayerState.ERROR && playPauseButton != null) { // 错误状态特殊处理
                 playPauseButton.setText("Retry");
                 playPauseButton.setEnabled(true);
             }
             return;
         }
 
+        // 根据不同状态设置按钮文本和可用性
         switch (state) {
             case IDLE:
                 playPauseButton.setText("Play");
-                playPauseButton.setEnabled(isYuvDecoded && isSurfaceReady);
+                playPauseButton.setEnabled(isYuvDecoded && isSurfaceReady); // 仅当YUV解码且Surface准备好时可用
                 stopButton.setEnabled(false);
                 speedButton.setEnabled(false);
-                seekBar.setEnabled(isYuvDecoded); // IDLE时允许拖动以选择起始点
+                seekBar.setEnabled(isYuvDecoded);
                 break;
             case PREPARING:
                 playPauseButton.setText("Preparing...");
@@ -441,108 +461,96 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
                 playPauseButton.setEnabled(isYuvDecoded && isSurfaceReady);
                 stopButton.setEnabled(false);
                 speedButton.setEnabled(false);
-                seekBar.setEnabled(isYuvDecoded); // STOPPED时允许拖动以选择起始点
-                if (seekBar != null) seekBar.setProgress(0); // 停止时进度条归零
+                seekBar.setEnabled(isYuvDecoded);
+                if (seekBar != null) seekBar.setProgress(0); // 重置进度条
                 break;
             case ERROR:
                 playPauseButton.setText("Retry");
-                playPauseButton.setEnabled(true); // 允许重试
+                playPauseButton.setEnabled(true);
                 stopButton.setEnabled(false);
                 speedButton.setEnabled(false);
-                seekBar.setEnabled(false); // 出错时不允许操作进度条
+                seekBar.setEnabled(false);
                 Toast.makeText(this, "An error occurred. Please retry.", Toast.LENGTH_LONG).show();
                 break;
         }
-        if (speedTextView != null) { // 确保 speedTextView 在任何时候都更新
+        if (speedTextView != null) { // 更新速度显示
             speedTextView.setText(String.format(Locale.US, "Speed: %.1fx", currentSpeed));
         }
     }
 
+    // --- SurfaceHolder.Callback 实现 ---
     @Override
-    public void surfaceCreated(SurfaceHolder holder) {
+    public void surfaceCreated(SurfaceHolder holder) { // Surface创建时调用
         Log.i(TAG, "Surface created.");
         this.surfaceHolder = holder;
-        isSurfaceReady = true;
-        // 如果YUV已解码且播放器处于可以播放的状态，更新UI
-        if (isYuvDecoded && (currentPlayerState == PlayerState.IDLE || currentPlayerState == PlayerState.STOPPED || currentPlayerState == PlayerState.ERROR || currentPlayerState == PlayerState.PREPARING /*解码后可能还在preparing UI*/) ) {
-            if (currentPlayerState == PlayerState.PREPARING && isYuvDecoded) { // 特殊情况：解码完成，但surface后创建
+        isSurfaceReady = true; // 标记Surface已准备好
+        // 如果YUV已解码且播放器处于可播放状态，则更新UI
+        if (isYuvDecoded && (currentPlayerState == PlayerState.IDLE || currentPlayerState == PlayerState.STOPPED || currentPlayerState == PlayerState.ERROR || currentPlayerState == PlayerState.PREPARING ) ) {
+            if (currentPlayerState == PlayerState.PREPARING && isYuvDecoded) { // 如果在准备中且YUV解码完成
                 updateUIForState(PlayerState.IDLE);
             } else {
-                updateUIForState(currentPlayerState); // 保持当前状态的UI，但启用播放按钮 (如果适用)
+                updateUIForState(currentPlayerState);
             }
-        } else if (currentPlayerState == PlayerState.PAUSED) {
+        } else if (currentPlayerState == PlayerState.PAUSED) { // 如果在暂停时Surface重建
             Log.w(TAG,"Surface created while player was paused. User might need to press resume.");
-            // 此时可以考虑是否自动恢复，但通常让用户手动恢复更好
-            updateUIForState(PlayerState.PAUSED); // 确保按钮状态正确
+            updateUIForState(PlayerState.PAUSED); // 保持暂停状态
         }
     }
 
     @Override
-    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
+    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) { // Surface尺寸或格式改变时调用
         Log.i(TAG, "Surface changed: " + width + "x" + height);
-        this.surfaceHolder = holder;
-        // 如果视频尺寸与Surface不匹配，可能需要在这里重新设置NativeWindow的buffer geometry
-        // 但当前的实现是在 nativeStartVideoPlayback 中设置
+        this.surfaceHolder = holder; // 更新SurfaceHolder引用
     }
 
     @Override
-    public void surfaceDestroyed(SurfaceHolder holder) {
+    public void surfaceDestroyed(SurfaceHolder holder) { // Surface销毁时调用
         Log.i(TAG, "Surface destroyed.");
-        isSurfaceReady = false;
-        // 当Surface销毁时，如果正在播放或暂停，我们选择暂停而不是完全停止
-        // 这样当Surface重建后，可以从暂停的位置恢复
-        if (currentPlayerState == PlayerState.PLAYING || currentPlayerState == PlayerState.PAUSED) {
+        isSurfaceReady = false; // 标记Surface未准备好
+        if (currentPlayerState == PlayerState.PLAYING || currentPlayerState == PlayerState.PAUSED) { // 如果在播放或暂停时销毁
             Log.w(TAG, "Surface destroyed during playback/pause. Pausing playback.");
-            nativePauseVideo(); // C++层暂停视频渲染
-            pauseAudio(true);   // OpenSL ES 暂停音频
+            nativePauseVideo(); // 暂停视频
+            pauseAudio(true);  // 暂停音频
             updateUIForState(PlayerState.PAUSED); // 更新UI为暂停状态
             mainUIHandler.removeCallbacks(progressUpdater); // 停止进度更新
         }
-        this.surfaceHolder = null;
+        this.surfaceHolder = null; // 清除SurfaceHolder引用
     }
 
+    // 将assets目录下的文件拷贝到应用的缓存目录
     private File copyAssetToCacheDir(String filename) throws IOException {
-        File cacheDir = getCacheDir();
-        File outFile = new File(cacheDir, filename);
-        // Optional: if you don't want to re-copy every time, uncomment below
-        // if (outFile.exists() && outFile.length() > 0) {
-        //    Log.i(TAG, "Asset '" + filename + "' already exists in cache: " + outFile.getAbsolutePath());
-        //    return outFile;
-        // }
-        try (InputStream in = getAssets().open(filename);
-             OutputStream out = new FileOutputStream(outFile)) {
-            byte[] buffer = new byte[4096];
+        File cacheDir = getCacheDir(); // 获取缓存目录
+        File outFile = new File(cacheDir, filename); // 创建输出文件对象
+        try (InputStream in = getAssets().open(filename); // 打开assets输入流
+             OutputStream out = new FileOutputStream(outFile)) { // 打开文件输出流
+            byte[] buffer = new byte[4096]; // 缓冲区
             int read;
-            while ((read = in.read(buffer)) != -1) {
+            while ((read = in.read(buffer)) != -1) { // 读取并写入
                 out.write(buffer, 0, read);
             }
             Log.i(TAG, "Asset '" + filename + "' copied to cache: " + outFile.getAbsolutePath());
         }
-        return outFile;
+        return outFile; // 返回拷贝后的文件对象
     }
 
     @Override
-    protected void onPause() {
+    protected void onPause() { // Activity暂停时调用
         super.onPause();
-        // 当Activity进入后台时，如果正在播放，则暂停
-        if (currentPlayerState == PlayerState.PLAYING) {
+        if (currentPlayerState == PlayerState.PLAYING) { // 如果正在播放，则暂停
             pauseCurrentPlayback();
         }
     }
 
     @Override
-    protected void onDestroy() {
+    protected void onDestroy() { // Activity销毁时调用
         super.onDestroy();
         Log.i(TAG, "onDestroy: Cleaning up resources.");
-        handleStop(); // 停止播放并释放native资源
-        if (backgroundExecutor != null && !backgroundExecutor.isShutdown()) {
+        handleStop(); // 停止播放并释放资源
+        if (backgroundExecutor != null && !backgroundExecutor.isShutdown()) { // 关闭后台线程池
             backgroundExecutor.shutdownNow();
         }
-        if (mainUIHandler != null) {
+        if (mainUIHandler != null) { // 移除Handler中的所有回调和消息
             mainUIHandler.removeCallbacksAndMessages(null);
         }
-        // 理论上 OpenSL ES 的 engine 和 outputMix 应该在这里销毁
-        // 但当前stopAudio只销毁player。如果需要彻底清理，应增加nativeDestroyAudioEngine()等方法
-        // 例如：nativeDestroyAudioEngine(); (需要在C++中实现)
     }
 }

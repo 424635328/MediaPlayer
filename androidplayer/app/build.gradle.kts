@@ -13,7 +13,10 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
+        ndk {
+            // 只构建和打包 arm64-v8a 架构的原生库
+            abiFilters.add("arm64-v8a") // 或者 abiFilters 'arm64-v8a'
+        }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -1,6 +1,6 @@
 # AndroidPlayer - 自定义音视频播放器
 
-AndroidPlayer 是一个示例 Android 应用程序，展示了如何使用 FFmpeg (用于解码) 和 OpenSL ES (用于音频播放) 构建一个自定义的音视频播放器。视频被预先解码为 YUV 文件，然后逐帧读取并渲染到 `SurfaceView`。音频则直接从原始 MP4 文件通过 OpenSL ES 播放。
+AndroidPlayer 是一个示例 Android 应用程序，展示了如何使用 FFmpeg (用于解码) 和 OpenSL ES/AAudio (用于音频播放) 构建一个自定义的音视频播放器。视频被预先解码为 YUV 文件，然后逐帧读取并渲染到 `SurfaceView`。音频则直接从原始 MP4 文件播放。
 
 这个项目主要用于学习和演示以下技术点：
 
@@ -8,7 +8,7 @@ AndroidPlayer 是一个示例 Android 应用程序，展示了如何使用 FFmpe
 * 通过 FFmpeg 进行视频解码。
 * 将解码后的视频帧保存为 YUV 文件。
 * 在 Native 层读取 YUV 文件并渲染到 Android `Surface`。
-* 使用 OpenSL ES 播放音频。
+* 使用 OpenSL ES (或 AAudio) 播放音频。
 * 基本的播放控制：播放、暂停、停止、倍速播放。
 * 滑动进度条 (SeekBar) 实现音视频同步跳转 (Seek)。
 * Android Activity 生命周期管理与播放器状态的协调。
@@ -19,17 +19,33 @@ AndroidPlayer 是一个示例 Android 应用程序，展示了如何使用 FFmpe
 ```bash
 AndroidPlayer/
 ├── app/
-│   ├── libs/                   # (如果需要存放预编译的 .so 文件)
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── assets/
 │   │   │   │   └── 1.mp4       # 示例MP4视频文件
 │   │   │   ├── cpp/
 │   │   │   │   ├── CMakeLists.txt
-│   │   │   │   └── native-lib.cpp # C++ JNI 和播放器核心逻辑
+│   │   │   │   ├── include/        # FFmpeg 头文件 (例如 libavcodec/avcodec.h)
+│   │   │   │   │   ├── libavcodec/
+│   │   │   │   │   ├── libavformat/
+│   │   │   │   │   ├── libavutil/
+│   │   │   │   │   ├── libswscale/
+│   │   │   │   │   └── ... (其他必要的FFmpeg头文件)
+│   │   │   │   ├── AAudioRender.cpp
+│   │   │   │   ├── ANWRender.cpp
+│   │   │   │   └── native-lib.cpp  # C++ JNI 和播放器核心逻辑
 │   │   │   ├── java/
-│   │   │   │   └── com/example/androidplayer/
+│   │   │   │   └── com/example/androidplayer/ # 替换为你的包名
 │   │   │   │       └── MainActivity.java # 主要的 Activity 和 Java 层逻辑
+│   │   │   ├── jniLibs/          # 存放预编译的 .so 文件 (标准位置)
+│   │   │   │   ├── arm64-v8a/
+│   │   │   │   │   └── libffmpeg.so  # 合并的 FFmpeg 动态库
+│   │   │   │   ├── armeabi-v7a/
+│   │   │   │   │   └── libffmpeg.so
+│   │   │   │   ├── x86/
+│   │   │   │   │   └── libffmpeg.so
+│   │   │   │   └── x86_64/
+│   │   │   │       └── libffmpeg.so
 │   │   │   ├── res/
 │   │   │   │   ├── layout/
 │   │   │   │   │   └── activity_main.xml # UI 布局
@@ -37,10 +53,18 @@ AndroidPlayer/
 │   │   │   └── AndroidManifest.xml
 │   │   └── build.gradle          # app 模块的 build.gradle
 │   └── ...
+├── ffmpeg-src/                 # (可选) FFmpeg 源码目录，如果与项目同级
+├── build_ffmpeg_android.sh     # (可选) FFmpeg 编译脚本 (如果自行编译)
 └── build.gradle                # 项目顶层的 build.gradle
 └── settings.gradle
-└── ...
+└── README.md                   # 本文件
+└── .gitignore
 ```
+
+**重要**:
+
+* FFmpeg 头文件期望放在 `app/src/main/cpp/include/` 目录下。
+* 一个名为 `libffmpeg.so` 的合并 FFmpeg 动态库期望放在 `app/src/main/jniLibs/<ABI>/` 目录下。
 
 ## 功能特性
 
@@ -50,7 +74,7 @@ AndroidPlayer/
   * Native 层读取 YUV 文件，将 YUV 数据转换为 RGBA。
   * 将 RGBA 数据渲染到 `SurfaceView`。
 * **音频播放**:
-  * 使用 OpenSL ES 直接从 MP4 文件播放音频流。
+  * 使用 OpenSL ES 或 AAudio 直接从 MP4 文件播放音频流。
 * **播放控制**:
   * 播放/暂停/继续播放。
   * 停止播放。
@@ -69,183 +93,292 @@ AndroidPlayer/
 
 ## 技术栈
 
-* **Java/Kotlin (Android SDK)**: 应用层逻辑和 UI。
+* **Java (Android SDK)**: 应用层逻辑和 UI。
 * **C/C++ (NDK)**: Native 层解码、渲染和音频播放逻辑。
 * **JNI (Java Native Interface)**: 连接 Java 层和 C++ 层。
-* **FFmpeg**: 用于视频解码 (提取视频帧并转换为 YUV)。
-  * `libavformat`: 处理多媒体容器格式。
-  * `libavcodec`: 编解码器。
-  * `libavutil`: 辅助工具函数。
-  * `libswscale`: (在此项目中主要用于 YUV 到 RGBA 的参考，实际转换在 Native 手动实现，但解码出的 YUV 格式依赖它)
-* **OpenSL ES**: Android NDK 提供的低延迟音频 API，用于音频播放。
+* **FFmpeg**: 用于视频解码 (包含 `libavformat`, `libavcodec`, `libavutil`, `libswscale` 等模块)。
+* **OpenSL ES / AAudio**: Android NDK 提供的音频 API，用于音频播放。
 * **CMake**: 用于构建 Native C++ 代码。
 
 ## 如何构建和运行
 
-### 1. 环境准备
+### 步骤 1: 准备开发环境 (Host System)
 
-* **Android Studio**: 最新稳定版。
-* **NDK (Native Development Kit)**: 通过 Android Studio SDK Manager 安装。
-* **CMake**: 通过 Android Studio SDK Manager 安装。
-* **FFmpeg 预编译库**:
-  * 本项目期望您已经为 Android 编译好了 FFmpeg 库 (`.so` 文件和头文件)。
-  * 您可以从网络上找到预编译的 FFmpeg Android 版本，或者参考 FFmpeg官方文档/社区教程自行编译。
-  * 编译时需要包含 `libavformat`, `libavcodec`, `libavutil`, `libswscale` (如果需要SwsContext转换)。
-  * 将编译好的 `.so` 文件放置到 `app/libs/<ABI>` 目录下 (例如 `app/libs/arm64-v8a/libavcodec.so`)，或者更推荐的方式是通过 `CMakeLists.txt` 来链接它们 (通常是将库放在一个外部目录，然后在CMake中指定路径)。
+在开始之前，确保您的开发环境已设置妥当：
 
-### 2. 配置 CMakeLists.txt
+1. **Android Studio**: 安装最新稳定版 (例如 Hedgehog | 2023.1.1 或更高版本)。
+2. **Android NDK**:
+    * 通过 Android Studio 打开 `SDK Manager`。
+    * 勾选 `NDK (Side by side)` 并安装一个较新的稳定版本 (例如 `25.2.9519653` 或 `26.1.10909125`。NDK r23+ 较好)。记下其安装路径。
+3. **CMake**:
+    * 同样在 `SDK Manager` > `SDK Tools` 中，确保 `CMake` 已安装 (例如 3.22.1 或更高)。
+4. **(可选) 如果您需要自己编译 FFmpeg**:
+    * **Git**: 用于下载 FFmpeg 源码。
+    * **构建工具 (根据您的操作系统选择)**:
+        * **Linux (推荐 Ubuntu/Debian)**: `build-essential`, `yasm`, `nasm`, `pkg-config`, `autoconf`, `automake`, `libtool`
+        * **macOS**: Xcode Command Line Tools, `yasm`, `nasm`, `pkg-config`, `autoconf`, `automake`, `libtool` (通过 Homebrew 安装)
+        * **Windows**: 强烈推荐使用 WSL 2 (Windows Subsystem for Linux) 并按 Linux 指引操作。
 
-您需要修改 `app/src/main/cpp/CMakeLists.txt` 文件，以正确链接到您的 FFmpeg 库。
+### 步骤 2: 获取并放置 FFmpeg 库和头文件
 
-一个示例 `CMakeLists.txt` 可能如下所示 (假设FFmpeg库在特定路径)：
+本项目期望您已经拥有为 Android 各 ABI 编译好的 `libffmpeg.so` 文件和相应的 FFmpeg 头文件。
+
+1. **获取 `libffmpeg.so`**:
+    * 您可以从第三方预编译库提供商处获取 (例如一些开源项目如 [ijkplayer](https://github.com/bilibili/ijkplayer) 的编译脚本可以生成，或者专门的 FFmpeg Android 构建项目)。
+    * 或者，如果您选择自行编译 FFmpeg 并将其组件合并成一个 `libffmpeg.so`，您需要一个特定的构建脚本来完成此操作 (标准的 FFmpeg `make install` 会生成多个独立的 `.so` 文件)。
+    * **将为您计划支持的每个 ABI (例如 `arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`) 获取或生成的 `libffmpeg.so` 文件放置到项目的 `app/src/main/jniLibs/<ABI>/` 目录下。**
+        例如: `app/src/main/jniLibs/arm64-v8a/libffmpeg.so`
+
+2. **获取 FFmpeg 头文件**:
+    * 这些头文件通常与编译产物一起提供，或者可以从与您 `.so` 版本匹配的 FFmpeg 源码的 `include` 目录中获取。
+    * **将所有 FFmpeg 头文件 (例如 `libavcodec`, `libavformat` 等子目录及其中的 `.h` 文件) 复制到项目的 `app/src/main/cpp/include/` 目录下。**
+        例如: `app/src/main/cpp/include/libavcodec/avcodec.h`
+
+**(可选) 步骤 2.A: 自行编译 FFmpeg (如果需要多个独立的 .so 文件)**
+
+如果您希望自行编译 FFmpeg 并得到多个独立的库文件 (如 `libavcodec.so`, `libavformat.so` 等)，然后修改 `CMakeLists.txt` 以链接它们 (参考上一版 README 中的方案 B)，可以使用以下脚本作为起点。**注意：此脚本不会生成单一的 `libffmpeg.so`。**
+
+在项目根目录创建 `build_ffmpeg_android.sh`:
+
+```bash
+#!/bin/bash
+
+# --- 配置开始 ---
+export NDK_PATH="/path/to/your/android-ndk" # 修改为你的 NDK 路径
+FFMPEG_SOURCE_PATH="./ffmpeg-src"            # FFmpeg 源码目录
+TEMP_OUTPUT_DIR="./ffmpeg_build_temp"        # 临时输出目录
+API_LEVEL=21
+TARGET_ABIS=("arm64-v8a" "armeabi-v7a" "x86" "x86_64")
+J_COUNT=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+# --- 配置结束 ---
+
+# (脚本的路径检查、工具链设置、循环编译逻辑与先前版本中的 build_ffmpeg_android.sh 脚本基本一致)
+# (请参考先前版本 README 中完整的脚本内容，确保 ./configure 部分启用你需要的组件并生成共享库)
+# 编译完成后，将 TEMP_OUTPUT_DIR/<ABI>/lib/*.so 复制到 app/src/main/jniLibs/<ABI>/
+# 将 TEMP_OUTPUT_DIR/<ABI>/include/* 复制到 app/src/main/cpp/include/
+```
+
+运行脚本: `chmod +x build_ffmpeg_android.sh && ./build_ffmpeg_android.sh`
+然后根据脚本输出提示复制文件。
+
+### 步骤 3: 配置 CMakeLists.txt
+
+确保您的 `app/src/main/cpp/CMakeLists.txt` 文件内容与您提供的版本一致，它配置为链接一个名为 `libffmpeg.so` 的导入库：
 
 ```cmake
-cmake_minimum_required(VERSION 3.10.2) # 或者您NDK支持的更高版本
-
+cmake_minimum_required(VERSION 3.22.1)
 project("androidplayer")
 
-# 设置 FFmpeg 库和头文件的路径 (根据您的实际情况修改)
-set(FFMPEG_BASE_DIR /path/to/your/ffmpeg-android) # 指向FFmpeg编译产物的根目录
-set(FFMPEG_INCLUDE_DIR ${FFMPEG_BASE_DIR}/include)
-set(FFMPEG_LIB_DIR ${FFMPEG_BASE_DIR}/lib/${ANDROID_ABI}) # ANDROID_ABI 会自动选择
+# 输出构建类型和ABI，方便调试
+message(STATUS "Building for ABI: ${ANDROID_ABI}")
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
-# 添加 Native 库 (native-lib.cpp)
-add_library(androidplayer SHARED native-lib.cpp)
+# FFmpeg 头文件目录 (相对于 app/src/main/cpp/CMakeLists.txt)
+set(ffmpeg_head_dir ${CMAKE_CURRENT_SOURCE_DIR}/include) # CMAKE_CURRENT_SOURCE_DIR 指向 CMakeLists.txt 所在的目录
+message(STATUS "FFmpeg include directory: ${ffmpeg_head_dir}")
+# include_directories(${ffmpeg_head_dir}) # 更推荐使用 target_include_directories
 
-# 添加 FFmpeg 头文件目录
-target_include_directories(androidplayer PRIVATE ${FFMPEG_INCLUDE_DIR})
+# FFmpeg 预编译库目录 (CMAKE_CURRENT_SOURCE_DIR 指向 app/src/main/cpp)
+# jniLibs 在 app/src/main/jniLibs，所以路径是 ${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}
+set(ffmpeg_lib_dir "${CMAKE_CURRENT_SOURCE_DIR}/../jniLibs/${ANDROID_ABI}")
+message(STATUS "FFmpeg library directory: ${ffmpeg_lib_dir}")
 
-# 链接系统库
-target_link_libraries(androidplayer
-    android     # Android NDK 核心库
-    nativewindow # ANativeWindow
-    log         # Android 日志
-    OpenSLES    # OpenSL ES
-    # 链接 FFmpeg 库
-    ${FFMPEG_LIB_DIR}/libavformat.so
-    ${FFMPEG_LIB_DIR}/libavcodec.so
-    ${FFMPEG_LIB_DIR}/libavutil.so
-    ${FFMPEG_LIB_DIR}/libswscale.so # 如果解码出的YUV非标准，或需转换时用
-    z           # FFmpeg 可能依赖 zlib
+# 添加 FFmpeg 库 (作为 IMPORTED 库)
+add_library(ffmpeg_imported SHARED IMPORTED) # 使用 ffmpeg_imported 以避免与 target_link_libraries 中的 ffmpeg 混淆
+set_target_properties(ffmpeg_imported PROPERTIES IMPORTED_LOCATION "${ffmpeg_lib_dir}/libffmpeg.so")
+
+# 查找 NDK 提供的标准库
+find_library(log-lib log)
+find_library(android-lib android)
+find_library(nativewindow-lib nativewindow)
+find_library(aaudio-lib aaudio)
+find_library(opensles-lib OpenSLES)
+find_library(z-lib z) # zlib
+
+# 定义你的项目库
+add_library(${CMAKE_PROJECT_NAME} SHARED
+        AAudioRender.cpp    # 确保这些源文件存在于 app/src/main/cpp/
+        ANWRender.cpp
+        native-lib.cpp
+)
+
+# 将 FFmpeg 头文件目录添加到你的项目库
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${ffmpeg_head_dir})
+
+# 链接库到你的项目
+target_link_libraries(${CMAKE_PROJECT_NAME}
+        # 依赖的第三方库
+        ffmpeg_imported          # 链接 FFmpeg (IMPORTED 库)
+
+        # NDK 标准库
+        ${log-lib}
+        ${android-lib}
+        ${nativewindow-lib}
+        ${aaudio-lib}
+        ${opensles-lib}
+        ${z-lib}
+
+        atomic                  # 对应 -latomic
+        m                       # 对应 -lm (数学库)
 )
 ```
 
-**重要**: `set(FFMPEG_BASE_DIR ...)` 和后续的路径需要根据您存放 FFmpeg 库的实际位置进行修改。
+### 步骤 4: 配置 app/build.gradle
 
-### 3. 放置示例视频
+打开 `app/build.gradle` 文件，确保其配置正确以支持 NDK 和 CMake。
 
-将一个名为 `1.mp4` 的 MP4 视频文件放到 `app/src/main/assets/` 目录下。
+```gradle
+plugins {
+    id 'com.android.application'
+    // id 'org.jetbrains.kotlin.android' // 如果使用 Kotlin
+}
 
-### 4. 构建和运行
+android {
+    // 确保将 'com.example.androidplayer' 替换为你的实际包名
+    namespace "com.example.androidplayer"
+    compileSdk 34 // 建议使用较新的 SDK
 
-1. 在 Android Studio 中打开项目。
-2. 等待 Gradle 同步完成。
-3. 如果 CMake 配置正确，项目应该可以正常构建。
-4. 连接一个 Android 设备或启动一个模拟器。
-5. 点击 "Run" 按钮。
+    defaultConfig {
+        applicationId "com.example.androidplayer" // 替换为你的实际包名
+        minSdk 21 // 必须与 FFmpeg 库兼容的最低 API 级别匹配
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
 
-应用启动后，会首先将 `assets/1.mp4` 解码为 YUV 文件并存放在应用的缓存目录中，这个过程可能需要一些时间，UI上会显示 "Preparing..."。解码完成后，播放按钮将变为可用。
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags "-std=c++17" // 示例: 使用 C++17 标准
+                // arguments "-DANDROID_STL=c++_shared" // 如果需要共享STL (默认c++_static通常没问题)
+            }
+        }
+        ndk {
+            // 指定你支持并已提供 libffmpeg.so 的 ABI
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false // 为简单起见，禁用 R8/ProGuard
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    // 如果使用 Kotlin
+    // kotlinOptions {
+    //    jvmTarget = '1.8'
+    // }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1" // 或您 SDK Manager 中安装的 CMake 版本
+        }
+    }
+
+    // 对于 app/src/main/jniLibs 目录，通常不需要显式配置 sourceSets.main.jniLibs.srcDirs
+    // 因为这是 Android Gradle 插件的默认查找路径之一。
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
+```
+
+### 步骤 5: 放置示例视频和 Native/Java 代码
+
+1. **示例视频**: 将一个名为 `1.mp4` 的 MP4 视频文件放到 `app/src/main/assets/` 目录下。如果 `assets` 目录不存在，请创建它。
+2. **Native 代码**:
+    * 将您的 FFmpeg 头文件放入 `app/src/main/cpp/include/`。
+    * 确保 `AAudioRender.cpp`, `ANWRender.cpp`, `native-lib.cpp` 文件存在于 `app/src/main/cpp/` 目录中，并包含您提供的 C++ 逻辑。
+3. **Java 代码 (`MainActivity.java`)**: 将您的 Java Activity (如 `com.example.androidplayer.MainActivity`) 和播放器控制逻辑放入 `app/src/main/java/` 下对应的包名目录中。
+
+### 步骤 6: 构建和运行
+
+1. **同步 Gradle 项目**: 在 Android Studio 中，点击工具栏的 "Sync Project with Gradle Files" 图标。
+2. 如果一切配置正确，项目应该可以正常构建。
+3. 连接一个 Android 设备或启动一个模拟器 (确保其 ABI 与您提供的 `libffmpeg.so` 兼容)。
+4. 点击 Android Studio 工具栏中的 "Run 'app'" 按钮。
+
+应用启动后，它会首先尝试将 `assets/1.mp4` 解码为 YUV 文件并存放在应用的缓存目录中。这个过程可能需要一些时间，UI上通常会显示 "Preparing..." 或类似状态。解码完成后，播放按钮将变为可用。
 
 ## 代码核心逻辑说明
+
+(这部分基于您提供的代码片段，您可以扩展它或保持原样)
 
 ### Java (MainActivity.java)
 
 * **UI 初始化与事件监听**: 设置 `SurfaceView`, 按钮, `SeekBar` 等，并为它们添加监听器。
-* **`SurfaceHolder.Callback`**: 处理 `Surface` 的创建、改变和销毁。`Surface` 准备好后才能开始 Native 渲染。
+* **`SurfaceHolder.Callback`**: 处理 `Surface` 的创建、改变和销毁。
 * **播放状态管理 (`PlayerState` enum)**: 维护播放器的当前状态，并据此更新UI。
-* **媒体准备 (`prepareMediaInBackground`)**:
-  * 将 `assets` 中的 MP4 文件复制到应用缓存目录。
-  * 调用 Native 方法 `decodeVideoToFile` 将 MP4 解码为 YUV 文件。
-  * 解码成功后，获取视频总帧数和帧率，并更新 `SeekBar`。
-* **播放控制方法 (`handlePlayPause`, `startNewPlayback`, `pauseCurrentPlayback`, `resumeCurrentPlayback`, `handleStop`, `handleSpeedToggle`)**:
-  * 调用相应的 Native 方法来控制视频和音频的播放。
-* **进度条更新 (`progressUpdater` Runnable)**: 定期从 Native 获取当前视频帧，更新 `SeekBar` 进度。
-* **SeekBar 事件处理**:
-  * `onStartTrackingTouch`: 用户开始拖动进度条。
-  * `onStopTrackingTouch`: 用户结束拖动。此时：
-        1. 计算目标视频帧号和对应的音频时间戳。
-        2. 如果正在播放/暂停，则先暂停音视频。
-        3. 调用 `nativeSeekToFrame` 跳转视频。
-        4. 调用 `nativeSeekAudioToTimestamp` 跳转音频。
-        5. 如果之前是播放状态，则恢复音视频播放。
-        6. 如果之前是停止/空闲状态，则记录目标位置，待下次播放时从该位置开始。
-* **JNI 方法声明**: 声明所有需要与 C++ 层交互的 `native` 方法。
+* **媒体准备 (`prepareMediaInBackground`)**: 拷贝MP4文件，调用 Native 方法 `decodeVideoToFile`。
+* **播放控制方法**: 调用相应的 Native 方法控制音视频。
+* **进度条更新与跳转**: 通过 JNI 与 Native 层同步进度和 Seek 请求。
+* **JNI 方法声明**: 声明所有与 C++ 层交互的 `native` 方法。
 
-### C++ (native-lib.cpp)
+### C++ (native-lib.cpp, AAudioRender.cpp, ANWRender.cpp)
 
-* **全局变量**: 用于存储播放状态、视频参数、线程对象、文件指针、OpenSL ES 对象等。
-* **`decodeVideoToFile`**:
-  * 使用 FFmpeg `libavformat` 打开输入 MP4 文件。
-  * 查找视频流，获取视频宽度、高度和平均帧率。
-  * 初始化 FFmpeg 解码器 (`libavcodec`)。
-  * 逐包读取视频数据，解码视频帧。
-  * 将解码后的 YUV420p 帧数据写入到指定的输出 YUV 文件。
-* **视频渲染 (`video_render_loop_internal` 线程函数)**:
-  * 在一个单独的线程中运行。
-  * 打开 YUV 文件。
-  * 循环处理：
-        1. **Seek 处理**: 检查 `g_seek_target_frame`，如果被设置，则使用 `fseek` 跳转到 YUV 文件中对应帧的位置。
-        2. **暂停处理**: 检查 `g_is_paused` 标志。
-        3. **读取YUV帧**: 从文件中读取一帧 YUV 数据。
-        4. **YUV转RGBA并渲染**:
-            * 锁定 `ANativeWindow` 的 buffer。
-            * 手动将 YUV420p 数据转换为 RGBA8888 格式。
-            * 将 RGBA 数据写入到 `ANativeWindow` 的 buffer 中。
-            * 解锁并提交 buffer (`ANativeWindow_unlockAndPost`)。
-        5. **速度控制**: 根据 `g_avg_frame_rate` 和 `g_playback_speed` 计算帧间延迟，使用 `usleep` 控制渲染速率。
-  * 线程退出时关闭 YUV 文件。
-* **Native 播放控制 JNI 函数**:
-  * `nativeStartVideoPlayback`: 获取 `ANativeWindow`，设置 buffer 几何参数，启动视频渲染线程。
-  * `nativeStopVideoPlayback`: 设置停止标志，等待渲染线程结束，释放 `ANativeWindow`。
-  * `nativePauseVideo` / `nativeResumeVideo`: 设置 `g_is_paused` 标志。
-  * `nativeSetSpeed`: 设置 `g_playback_speed`。
-  * `nativeSeekToFrame`: 设置 `g_seek_target_frame`，渲染线程会响应。
-  * `nativeGetTotalFrames`: 计算YUV文件的总帧数。
-  * `nativeGetCurrentFrame`: 返回当前已渲染的视频帧号。
-  * `nativeGetFrameRate`: 返回视频的平均帧率。
-* **OpenSL ES 音频 JNI 函数**:
-  * `initAudio`: 初始化 OpenSL ES 引擎和输出混音器。
-  * `startAudio`:
-        1. 创建音频播放器对象 (`playerObject`)。
-        2. 设置数据源为 MP4 文件 URI。
-        3. 获取 `SLPlayItf` (播放接口) 和 `SLSeekItf` (跳转接口)。
-        4. 如果传入了 `startOffsetMs` 或存在 `g_audio_start_offset_ms`，则在播放前尝试使用 `SLSeekItf::SetPosition` 跳转到指定时间点。
-        5. 设置播放状态为 `SL_PLAYSTATE_PLAYING`。
-  * `stopAudio`: 停止播放并销毁音频播放器对象。
-  * `pauseAudio`: 根据参数设置播放状态为 `SL_PLAYSTATE_PAUSED` 或 `SL_PLAYSTATE_PLAYING`。
-  * `nativeSeekAudioToTimestamp`:
-        1. 如果正在播放，先暂停。
-        2. 使用 `SLSeekItf::SetPosition` 跳转到指定的时间戳。
-        3. 如果之前是播放状态，则恢复播放。
-        4. 如果播放器处于停止状态，则记录此时间戳供下次 `startAudio` 使用。
+* **全局变量**: 存储播放状态、视频参数、线程对象、OpenSL ES/AAudio 对象等。
+* **`decodeVideoToFile` (JNI)**:
+  * 使用 FFmpeg 打开输入 MP4 文件，查找视频流，获取参数。
+  * 初始化 FFmpeg 解码器。
+  * 逐包读取、解码视频帧，并将 YUV420p 数据写入本地 YUV 文件。
+* **视频渲染 (`video_render_loop_internal` in `ANWRender.cpp` or `native-lib.cpp`)**:
+  * 在单独线程中运行。
+  * 读取 YUV 文件帧。
+  * 将 YUV420p 数据手动转换为 RGBA8888。
+  * 使用 `ANativeWindow` 将 RGBA 数据渲染到 `Surface`。
+  * 通过 `usleep` 和帧率、播放速度控制渲染速率。
+* **音频播放 (OpenSL ES in `native-lib.cpp` or AAudio in `AAudioRender.cpp`)**:
+  * 初始化音频引擎 (OpenSL ES `engineObject` 或 AAudio `streamBuilder`)。
+  * 创建音频播放器/流，设置数据源为 MP4 文件 URI。
+  * 获取播放、跳转、速率控制接口。
+  * 控制播放状态 (播放、暂停、停止)。
+  * 实现音频跳转 (`SetPosition` / `AAudioStream_requestStart` with offset)。
+  * 实现音频速率控制。
+* **JNI 接口**: 提供 Java 层调用上述功能的入口点，如开始/停止/暂停/恢复播放、设置速度、跳转等。
 
 ## 待改进和扩展
 
-* **硬解码**: 目前使用 FFmpeg 软解码，可以考虑集成 Android `MediaCodec` 进行硬解码以提高性能和效率。
-* **音频解码到PCM**: 为了更精确的音频控制和同步，可以将音频也解码为 PCM 数据流，然后通过 OpenSL ES 播放 PCM buffer queue。
-* **高级同步机制**: 实现基于时间戳的音视频同步，而不是简单地依赖帧渲染和音频播放的独立启动/跳转。可以使用一个主时钟（如音频播放时钟）来驱动视频渲染。
-* **SwsContext**: 如果解码出的视频帧不是标准的 YUV420p，或者需要进行缩放，应使用 FFmpeg 的 `libswscale` (SwsContext) 进行转换。
-* **错误处理**: 增强 Native 层的错误处理和反馈机制。
-* **缓冲机制**: 为视频和音频数据添加缓冲，以应对网络波动或解码延迟（如果从网络流播放）。
-* **UI 优化**: 更美观和用户友好的界面。
-* **全面清理 OpenSL ES 资源**: 在 `onDestroy` 中确保 `engineObject` 和 `outputMixObject` 也被正确销毁。
+* **硬解码**: 集成 Android `MediaCodec` 进行硬解码。
+* **音频解码到PCM**: 将音频解码为 PCM 数据流，通过 OpenSL ES buffer queue 或 AAudio `AAudioStream_write` 播放。
+* **高级同步机制**: 实现基于时间戳的音视频同步。
+* **SwsContext**: 如果解码出的视频帧非标准YUV420p或需缩放，使用 FFmpeg `libswscale`。
+* **错误处理与反馈**: 增强 Native 层错误处理。
+* **缓冲机制**: 为网络流添加数据缓冲。
+* **UI 优化**: 改进用户界面。
 
 ## 常见问题及解决方案
 
-* **`UnsatisfiedLinkError`**:
-  * 检查 `System.loadLibrary("androidplayer")` 中的库名是否与 `CMakeLists.txt` 中 `add_library` 的目标名一致。
-  * 确保 FFmpeg 的 `.so` 文件已正确放置并被打包到 APK 中相应 ABI 的 `lib` 目录下。
-  * 检查 `CMakeLists.txt` 中链接 FFmpeg 库的路径和名称是否正确。
-  * 确保设备/模拟器的 ABI 与您提供的 `.so` 文件兼容。
+* **`UnsatisfiedLinkError: dlopen failed: library "libffmpeg.so" not found`**:
+  * 确保 `libffmpeg.so` 已正确放置到 `app/src/main/jniLibs/<ABI>/` 目录中。
+  * 检查 `app/build.gradle` 中的 `ndk { abiFilters ... }` 是否包含了您设备/模拟器对应的 ABI，并且该 ABI 的 `libffmpeg.so` 文件存在。
+  * 确保 `CMakeLists.txt` 中 `set_target_properties(ffmpeg_imported PROPERTIES IMPORTED_LOCATION "${ffmpeg_lib_dir}/libffmpeg.so")` 的路径计算正确。
+* **`UnsatisfiedLinkError` (其他 JNI 方法)**:
+  * 检查 `System.loadLibrary("androidplayer")` 中的库名是否与 `CMakeLists.txt` 中 `project("androidplayer")` 和 `add_library(androidplayer ...)` 的目标名一致。
+  * 确保 Java 层的 `native` 方法声明与 C++ 中的 JNI 函数签名完全匹配 (包括包名和类名)。
 * **视频解码失败**:
-  * 确认输入的 MP4 文件格式被 FFmpeg 支持。
-  * 检查 FFmpeg 库是否完整编译，包含了所需的解码器。
-  * 查看 Logcat 中来自 "MyPlayerCPP" (Native 层) 和 "MainActivity" (Java 层) 的错误日志。
-* **音视频不同步 (进一步优化)**:
-  * 虽然当前版本实现了基本的跳转同步，但连续播放时的细微不同步可能仍存在。需要更复杂的基于时间戳的同步策略。
-* **ANativeWindow 错误**:
-  * 确保 `ANativeWindow_setBuffersGeometry` 在 `Surface` 有效且视频尺寸已知时调用。
-  * 确保在 `Surface` 销毁前或销毁时，Native 渲染线程已停止或不再访问 `ANativeWindow`。
+  * 确认输入的 MP4 文件有效且被您的 `libffmpeg.so` 所包含的解码器支持。
+  * 检查 `libffmpeg.so` 是否完整包含了所有必要的 FFmpeg 组件 (demuxers, decoders)。
+  * 查看 Logcat 中来自 "MyPlayerCPP" 和 "MainActivity" 的详细错误日志。
+* **音视频不同步**: 需要更复杂的基于时间戳的同步策略。
+* **ANativeWindow 或 AAudio 错误**:
+  * 确保 `ANativeWindow_setBuffersGeometry` 或 AAudio流参数设置在 `Surface` 有效且视频/音频参数已知时调用。
+  * 确保在 `Surface` 销毁或 AAudio流关闭前，相关 Native 线程已停止或不再访问这些资源。
+* **FFmpeg 头文件找不到**:
+  * 确保 FFmpeg 头文件已正确复制到 `app/src/main/cpp/include/`。
+  * 检查 `CMakeLists.txt` 中 `set(ffmpeg_head_dir ${CMAKE_CURRENT_SOURCE_DIR}/include)` 是否正确指向该目录，并且 `target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${ffmpeg_head_dir})` 已设置。
 
 ## 贡献
 

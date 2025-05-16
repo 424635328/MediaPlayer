@@ -315,8 +315,6 @@ dependencies {
 
 ## 代码核心逻辑说明
 
-(这部分基于您提供的代码片段，您可以扩展它或保持原样)
-
 ### Java (MainActivity.java)
 
 * **UI 初始化与事件监听**: 设置 `SurfaceView`, 按钮, `SeekBar` 等，并为它们添加监听器。

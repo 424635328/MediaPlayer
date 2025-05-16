@@ -1,113 +1,254 @@
-# Android 视频播放器 - 高性能定制化多媒体体验
+# AndroidPlayer - 自定义音视频播放器
 
-## 项目简介
+AndroidPlayer 是一个示例 Android 应用程序，展示了如何使用 FFmpeg (用于解码) 和 OpenSL ES (用于音频播放) 构建一个自定义的音视频播放器。视频被预先解码为 YUV 文件，然后逐帧读取并渲染到 `SurfaceView`。音频则直接从原始 MP4 文件通过 OpenSL ES 播放。
 
-本项目是一个基于 Android 平台的视频播放器应用，旨在提供 **高效、稳定、可定制** 的多媒体播放体验。  通过 **FFmpeg** 实现强大的视频解码能力，利用 **OpenSL ES** 提供低延迟音频播放，并使用 **ANativeWindow** 将 YUV 视频帧高效渲染到 **SurfaceView**。  应用具备 **播放速度控制、暂停/恢复、音视频同步** 等核心特性。
+这个项目主要用于学习和演示以下技术点：
 
-核心性能部分采用 **C++** 和 **JNI** 进行原生开发，充分发挥硬件性能，打造流畅、可定制的播放体验。
-
-## 核心特性
-
-*   **平台:** Android
-*   **广泛的视频格式支持:**  得益于 FFmpeg，支持绝大多数常见的视频格式。
-*   **低延迟音频:**  通过 OpenSL ES 实现快速响应的音频播放。
-*   **高效视频渲染:**  利用 ANativeWindow 直接将 YUV 帧渲染到 SurfaceView，大幅提升渲染效率。
-*   **灵活的播放控制:**
-    *   **速度调节:**  支持自定义播放速度，包括快进和慢放。
-    *   **基础控制:**  提供标准的暂停、恢复播放功能。
-*   **卓越的音视频同步:**  保证音视频完美同步，带来最佳观看体验。
-*   **原生代码性能优化:**
-    *   **C++ 实现:** 核心的视频解码、音频处理和 YUV 渲染等模块采用 C++ 编写。
-    *   **JNI 桥接:** 通过 JNI 实现 Java 和 C++ 代码的无缝交互。
-*   **并发处理机制:** 使用 ExecutorService 管理并发任务，避免阻塞主线程，确保 UI 的流畅响应。
-*   **健壮的错误处理:** 完善的错误处理机制，提高应用的稳定性和可靠性。
-
-## 技术栈
-
-*   **Java:**  UI 界面和应用逻辑开发。
-*   **C++:**  性能敏感的音视频解码和处理。
-*   **FFmpeg:**  强大的多媒体框架，负责将各种视频格式解码为 YUV 数据。
-*   **OpenSL ES:**  Android 平台上的原生音频 API，用于低延迟音频播放。
-*   **ANativeWindow:**  Android NDK 提供的窗口接口，用于直接渲染 YUV 视频帧到 SurfaceView。
-*   **JNI (Java Native Interface):**  Java 代码和 C++ 代码之间的桥梁。
-*   **SurfaceView:**  用于显示视频画面的视图组件。
-*   **ExecutorService:**  线程池，用于管理并发任务。
+* JNI (Java Native Interface) 的使用。
+* 通过 FFmpeg 进行视频解码。
+* 将解码后的视频帧保存为 YUV 文件。
+* 在 Native 层读取 YUV 文件并渲染到 Android `Surface`。
+* 使用 OpenSL ES 播放音频。
+* 基本的播放控制：播放、暂停、停止、倍速播放。
+* 滑动进度条 (SeekBar) 实现音视频同步跳转 (Seek)。
+* Android Activity 生命周期管理与播放器状态的协调。
+* 多线程处理（UI线程、后台解码线程、Native渲染线程）。
 
 ## 项目结构
 
+```bash
+AndroidPlayer/
+├── app/
+│   ├── libs/                   # (如果需要存放预编译的 .so 文件)
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── assets/
+│   │   │   │   └── 1.mp4       # 示例MP4视频文件
+│   │   │   ├── cpp/
+│   │   │   │   ├── CMakeLists.txt
+│   │   │   │   └── native-lib.cpp # C++ JNI 和播放器核心逻辑
+│   │   │   ├── java/
+│   │   │   │   └── com/example/androidplayer/
+│   │   │   │       └── MainActivity.java # 主要的 Activity 和 Java 层逻辑
+│   │   │   ├── res/
+│   │   │   │   ├── layout/
+│   │   │   │   │   └── activity_main.xml # UI 布局
+│   │   │   │   └── ... (其他资源)
+│   │   │   └── AndroidManifest.xml
+│   │   └── build.gradle          # app 模块的 build.gradle
+│   └── ...
+└── build.gradle                # 项目顶层的 build.gradle
+└── settings.gradle
+└── ...
 ```
-├── app/                    # Android 应用代码
-│   ├── src/               # 源代码
-│   │   ├── main/          # 主要代码
-│   │   │   ├── java/      # Java 代码
-│   │   │   ├── cpp/       # C++ 代码 (JNI)
-│   │   │   ├── res/       # 资源文件 (布局、图片等)
-│   ├── build.gradle        # Gradle 构建文件
-├── gradle/                 # Gradle 相关文件
-├── gradlew                 # Gradle 包装器
-└── settings.gradle       # 项目设置
+
+## 功能特性
+
+* **视频播放**:
+  * 从 MP4 文件解码视频流。
+  * 将视频帧解码为 YUV (YUV420p) 格式并保存到本地缓存文件。
+  * Native 层读取 YUV 文件，将 YUV 数据转换为 RGBA。
+  * 将 RGBA 数据渲染到 `SurfaceView`。
+* **音频播放**:
+  * 使用 OpenSL ES 直接从 MP4 文件播放音频流。
+* **播放控制**:
+  * 播放/暂停/继续播放。
+  * 停止播放。
+  * 调整播放速度 (0.5x, 1.0x, 1.5x, 2.0x)。
+* **进度条与跳转 (Seek)**:
+  * 显示当前播放进度。
+  * 允许用户通过拖动进度条跳转到视频的任意位置。
+  * **实现了音视频同步跳转**：视频帧和音频流会同步到用户选择的时间点。
+* **UI**:
+  * 使用 `SurfaceView` 显示视频。
+  * 包含播放/暂停按钮、停止按钮、倍速按钮、进度条和速度显示文本。
+* **错误处理与状态管理**:
+  * 管理播放器的不同状态 (IDLE, PREPARING, PLAYING, PAUSED, STOPPED, ERROR)。
+  * UI 根据播放器状态进行更新。
+  * 处理 Activity 生命周期事件 (如 `onPause`, `onDestroy`, `surfaceDestroyed`)。
+
+## 技术栈
+
+* **Java/Kotlin (Android SDK)**: 应用层逻辑和 UI。
+* **C/C++ (NDK)**: Native 层解码、渲染和音频播放逻辑。
+* **JNI (Java Native Interface)**: 连接 Java 层和 C++ 层。
+* **FFmpeg**: 用于视频解码 (提取视频帧并转换为 YUV)。
+  * `libavformat`: 处理多媒体容器格式。
+  * `libavcodec`: 编解码器。
+  * `libavutil`: 辅助工具函数。
+  * `libswscale`: (在此项目中主要用于 YUV 到 RGBA 的参考，实际转换在 Native 手动实现，但解码出的 YUV 格式依赖它)
+* **OpenSL ES**: Android NDK 提供的低延迟音频 API，用于音频播放。
+* **CMake**: 用于构建 Native C++ 代码。
+
+## 如何构建和运行
+
+### 1. 环境准备
+
+* **Android Studio**: 最新稳定版。
+* **NDK (Native Development Kit)**: 通过 Android Studio SDK Manager 安装。
+* **CMake**: 通过 Android Studio SDK Manager 安装。
+* **FFmpeg 预编译库**:
+  * 本项目期望您已经为 Android 编译好了 FFmpeg 库 (`.so` 文件和头文件)。
+  * 您可以从网络上找到预编译的 FFmpeg Android 版本，或者参考 FFmpeg官方文档/社区教程自行编译。
+  * 编译时需要包含 `libavformat`, `libavcodec`, `libavutil`, `libswscale` (如果需要SwsContext转换)。
+  * 将编译好的 `.so` 文件放置到 `app/libs/<ABI>` 目录下 (例如 `app/libs/arm64-v8a/libavcodec.so`)，或者更推荐的方式是通过 `CMakeLists.txt` 来链接它们 (通常是将库放在一个外部目录，然后在CMake中指定路径)。
+
+### 2. 配置 CMakeLists.txt
+
+您需要修改 `app/src/main/cpp/CMakeLists.txt` 文件，以正确链接到您的 FFmpeg 库。
+
+一个示例 `CMakeLists.txt` 可能如下所示 (假设FFmpeg库在特定路径)：
+
+```cmake
+cmake_minimum_required(VERSION 3.10.2) # 或者您NDK支持的更高版本
+
+project("androidplayer")
+
+# 设置 FFmpeg 库和头文件的路径 (根据您的实际情况修改)
+set(FFMPEG_BASE_DIR /path/to/your/ffmpeg-android) # 指向FFmpeg编译产物的根目录
+set(FFMPEG_INCLUDE_DIR ${FFMPEG_BASE_DIR}/include)
+set(FFMPEG_LIB_DIR ${FFMPEG_BASE_DIR}/lib/${ANDROID_ABI}) # ANDROID_ABI 会自动选择
+
+# 添加 Native 库 (native-lib.cpp)
+add_library(androidplayer SHARED native-lib.cpp)
+
+# 添加 FFmpeg 头文件目录
+target_include_directories(androidplayer PRIVATE ${FFMPEG_INCLUDE_DIR})
+
+# 链接系统库
+target_link_libraries(androidplayer
+    android     # Android NDK 核心库
+    nativewindow # ANativeWindow
+    log         # Android 日志
+    OpenSLES    # OpenSL ES
+    # 链接 FFmpeg 库
+    ${FFMPEG_LIB_DIR}/libavformat.so
+    ${FFMPEG_LIB_DIR}/libavcodec.so
+    ${FFMPEG_LIB_DIR}/libavutil.so
+    ${FFMPEG_LIB_DIR}/libswscale.so # 如果解码出的YUV非标准，或需转换时用
+    z           # FFmpeg 可能依赖 zlib
+)
 ```
 
-## 编译和运行
+**重要**: `set(FFMPEG_BASE_DIR ...)` 和后续的路径需要根据您存放 FFmpeg 库的实际位置进行修改。
 
-1.  **环境准备:** 确保已安装 Android SDK 和 NDK，并正确配置环境变量。
-2.  **克隆项目:**  `git clone https://github.com/424635328/MediaPlayer`
-3.  **导入项目:** 使用 Android Studio 打开项目，选择项目根目录下的 `settings.gradle` 文件。
-4.  **NDK 配置:** 如果 Android Studio 未自动检测到 NDK 路径，请在 `local.properties` 文件中手动配置 `ndk.dir` 属性。 例如: `ndk.dir=/path/to/your/ndk`
-5.  **构建项目:**  在 Android Studio 中选择 "Build" -> "Make Project" 或 "Build" -> "Rebuild Project"。
-6.  **运行应用:**  连接 Android 设备或启动模拟器，然后选择 "Run" -> "Run 'app'"。
+### 3. 放置示例视频
 
-## 使用说明
+将一个名为 `1.mp4` 的 MP4 视频文件放到 `app/src/main/assets/` 目录下。
 
-1.  **启动应用:** 在 Android 设备或模拟器上打开应用。
-2.  **选择视频:** 点击 "选择文件" 按钮，浏览并选择要播放的视频文件。
-3.  **控制播放:** 使用提供的播放、暂停、恢复、快进等控件进行播放控制。
-4.  **调整速度:**  拖动播放速度滑块，调整播放速度。
+### 4. 构建和运行
 
-## 常见问题及解决方案 (Troubleshooting)
+1. 在 Android Studio 中打开项目。
+2. 等待 Gradle 同步完成。
+3. 如果 CMake 配置正确，项目应该可以正常构建。
+4. 连接一个 Android 设备或启动一个模拟器。
+5. 点击 "Run" 按钮。
 
-*   **应用崩溃/闪退：**
-    *   **原因：** 可能由于视频格式不支持、解码失败、内存溢出或其他未知错误导致。
-    *   **解决方案：**
-        *   **检查视频格式：** 确认视频格式是否在支持范围内（例如：MP4, AVI, MKV）。尝试使用不同的视频文件进行测试。
-        *   **查看 Logcat 日志：** 使用 Android Studio 的 Logcat 工具查看错误日志，寻找崩溃原因。重点关注 C++ 代码和 JNI 相关的错误信息。
-        *   **清理缓存：** 清理应用缓存，释放内存资源。
-        *   **重新编译：** 尝试重新编译项目，确保代码和依赖库版本正确。
-        *   **检查 NDK 版本：** 确认 NDK 版本与项目兼容。过高或过低的 NDK 版本可能导致编译和运行问题。
-*   **视频无法播放/花屏：**
-    *   **原因：** FFmpeg 解码器可能不支持该视频的编码格式，或者 YUV 渲染出现问题。
-    *   **解决方案：**
-        *   **更换视频文件：** 尝试播放其他视频文件，判断是否是视频文件本身的问题。
-        *   **检查 FFmpeg 配置：** 确认 FFmpeg 库已正确集成，并且包含了需要的解码器。
-        *   **检查 SurfaceView：** 检查 SurfaceView 是否正确初始化，并且大小设置是否正确。
-        *   **检查 YUV 渲染代码：** 检查 C++ 代码中 YUV 渲染部分是否存在错误。
-*   **音频播放异常：**
-    *   **原因：** OpenSL ES 初始化失败，或者音频解码出现问题。
-    *   **解决方案：**
-        *   **检查 OpenSL ES 初始化代码：** 确认 OpenSL ES 引擎和播放器对象已正确创建和初始化。
-        *   **检查音频解码：** 查看 Logcat 日志，确认音频解码过程中是否存在错误。
-        *   **检查权限：** 确认应用已获取音频录制权限 (虽然播放不需要录制权限，但某些设备上没有权限会导致初始化失败)。
-*   **JNI 相关错误：**
-    *   **原因：** Java 代码调用 C++ 代码时出现错误，例如方法签名不匹配，或者 C++ 代码崩溃。
-    *   **解决方案：**
-        *   **检查 JNI 方法签名：** 确认 Java 代码中声明的 native 方法签名与 C++ 代码中的方法签名完全一致。
-        *   **使用 `javah` 生成头文件：** 使用 `javah` 命令生成 C++ 头文件，避免手动编写方法签名时出错。
-        *   **调试 C++ 代码：** 使用 Android Studio 的调试器调试 C++ 代码，查找崩溃原因。
+应用启动后，会首先将 `assets/1.mp4` 解码为 YUV 文件并存放在应用的缓存目录中，这个过程可能需要一些时间，UI上会显示 "Preparing..."。解码完成后，播放按钮将变为可用。
 
-**一般调试技巧：**
+## 代码核心逻辑说明
 
-*   **Logcat 日志：** 始终关注 Android Studio 的 Logcat 日志，它是解决问题的关键。
-*   **断点调试：** 使用 Android Studio 的调试器，在 Java 和 C++ 代码中设置断点，逐步调试代码。
-*   **Google 搜索：** 将错误信息复制到 Google 搜索，查找相关的解决方案。
+### Java (MainActivity.java)
 
-## 贡献指南
+* **UI 初始化与事件监听**: 设置 `SurfaceView`, 按钮, `SeekBar` 等，并为它们添加监听器。
+* **`SurfaceHolder.Callback`**: 处理 `Surface` 的创建、改变和销毁。`Surface` 准备好后才能开始 Native 渲染。
+* **播放状态管理 (`PlayerState` enum)**: 维护播放器的当前状态，并据此更新UI。
+* **媒体准备 (`prepareMediaInBackground`)**:
+  * 将 `assets` 中的 MP4 文件复制到应用缓存目录。
+  * 调用 Native 方法 `decodeVideoToFile` 将 MP4 解码为 YUV 文件。
+  * 解码成功后，获取视频总帧数和帧率，并更新 `SeekBar`。
+* **播放控制方法 (`handlePlayPause`, `startNewPlayback`, `pauseCurrentPlayback`, `resumeCurrentPlayback`, `handleStop`, `handleSpeedToggle`)**:
+  * 调用相应的 Native 方法来控制视频和音频的播放。
+* **进度条更新 (`progressUpdater` Runnable)**: 定期从 Native 获取当前视频帧，更新 `SeekBar` 进度。
+* **SeekBar 事件处理**:
+  * `onStartTrackingTouch`: 用户开始拖动进度条。
+  * `onStopTrackingTouch`: 用户结束拖动。此时：
+        1. 计算目标视频帧号和对应的音频时间戳。
+        2. 如果正在播放/暂停，则先暂停音视频。
+        3. 调用 `nativeSeekToFrame` 跳转视频。
+        4. 调用 `nativeSeekAudioToTimestamp` 跳转音频。
+        5. 如果之前是播放状态，则恢复音视频播放。
+        6. 如果之前是停止/空闲状态，则记录目标位置，待下次播放时从该位置开始。
+* **JNI 方法声明**: 声明所有需要与 C++ 层交互的 `native` 方法。
 
-欢迎参与本项目，贡献代码、提交问题报告或提出改进建议。
+### C++ (native-lib.cpp)
 
-## 许可证
+* **全局变量**: 用于存储播放状态、视频参数、线程对象、文件指针、OpenSL ES 对象等。
+* **`decodeVideoToFile`**:
+  * 使用 FFmpeg `libavformat` 打开输入 MP4 文件。
+  * 查找视频流，获取视频宽度、高度和平均帧率。
+  * 初始化 FFmpeg 解码器 (`libavcodec`)。
+  * 逐包读取视频数据，解码视频帧。
+  * 将解码后的 YUV420p 帧数据写入到指定的输出 YUV 文件。
+* **视频渲染 (`video_render_loop_internal` 线程函数)**:
+  * 在一个单独的线程中运行。
+  * 打开 YUV 文件。
+  * 循环处理：
+        1. **Seek 处理**: 检查 `g_seek_target_frame`，如果被设置，则使用 `fseek` 跳转到 YUV 文件中对应帧的位置。
+        2. **暂停处理**: 检查 `g_is_paused` 标志。
+        3. **读取YUV帧**: 从文件中读取一帧 YUV 数据。
+        4. **YUV转RGBA并渲染**:
+            * 锁定 `ANativeWindow` 的 buffer。
+            * 手动将 YUV420p 数据转换为 RGBA8888 格式。
+            * 将 RGBA 数据写入到 `ANativeWindow` 的 buffer 中。
+            * 解锁并提交 buffer (`ANativeWindow_unlockAndPost`)。
+        5. **速度控制**: 根据 `g_avg_frame_rate` 和 `g_playback_speed` 计算帧间延迟，使用 `usleep` 控制渲染速率。
+  * 线程退出时关闭 YUV 文件。
+* **Native 播放控制 JNI 函数**:
+  * `nativeStartVideoPlayback`: 获取 `ANativeWindow`，设置 buffer 几何参数，启动视频渲染线程。
+  * `nativeStopVideoPlayback`: 设置停止标志，等待渲染线程结束，释放 `ANativeWindow`。
+  * `nativePauseVideo` / `nativeResumeVideo`: 设置 `g_is_paused` 标志。
+  * `nativeSetSpeed`: 设置 `g_playback_speed`。
+  * `nativeSeekToFrame`: 设置 `g_seek_target_frame`，渲染线程会响应。
+  * `nativeGetTotalFrames`: 计算YUV文件的总帧数。
+  * `nativeGetCurrentFrame`: 返回当前已渲染的视频帧号。
+  * `nativeGetFrameRate`: 返回视频的平均帧率。
+* **OpenSL ES 音频 JNI 函数**:
+  * `initAudio`: 初始化 OpenSL ES 引擎和输出混音器。
+  * `startAudio`:
+        1. 创建音频播放器对象 (`playerObject`)。
+        2. 设置数据源为 MP4 文件 URI。
+        3. 获取 `SLPlayItf` (播放接口) 和 `SLSeekItf` (跳转接口)。
+        4. 如果传入了 `startOffsetMs` 或存在 `g_audio_start_offset_ms`，则在播放前尝试使用 `SLSeekItf::SetPosition` 跳转到指定时间点。
+        5. 设置播放状态为 `SL_PLAYSTATE_PLAYING`。
+  * `stopAudio`: 停止播放并销毁音频播放器对象。
+  * `pauseAudio`: 根据参数设置播放状态为 `SL_PLAYSTATE_PAUSED` 或 `SL_PLAYSTATE_PLAYING`。
+  * `nativeSeekAudioToTimestamp`:
+        1. 如果正在播放，先暂停。
+        2. 使用 `SLSeekItf::SetPosition` 跳转到指定的时间戳。
+        3. 如果之前是播放状态，则恢复播放。
+        4. 如果播放器处于停止状态，则记录此时间戳供下次 `startAudio` 使用。
 
-本项目使用 MIT License 开源协议。 详情请参考 [LICENSE](LICENSE) 文件。
+## 待改进和扩展
 
-## 联系方式
+* **硬解码**: 目前使用 FFmpeg 软解码，可以考虑集成 Android `MediaCodec` 进行硬解码以提高性能和效率。
+* **音频解码到PCM**: 为了更精确的音频控制和同步，可以将音频也解码为 PCM 数据流，然后通过 OpenSL ES 播放 PCM buffer queue。
+* **高级同步机制**: 实现基于时间戳的音视频同步，而不是简单地依赖帧渲染和音频播放的独立启动/跳转。可以使用一个主时钟（如音频播放时钟）来驱动视频渲染。
+* **SwsContext**: 如果解码出的视频帧不是标准的 YUV420p，或者需要进行缩放，应使用 FFmpeg 的 `libswscale` (SwsContext) 进行转换。
+* **错误处理**: 增强 Native 层的错误处理和反馈机制。
+* **缓冲机制**: 为视频和音频数据添加缓冲，以应对网络波动或解码延迟（如果从网络流播放）。
+* **UI 优化**: 更美观和用户友好的界面。
+* **全面清理 OpenSL ES 资源**: 在 `onDestroy` 中确保 `engineObject` 和 `outputMixObject` 也被正确销毁。
 
-[MiracleHcat@gmail.com](mailto:MiracleHcat@gmail.com)
+## 常见问题及解决方案
+
+* **`UnsatisfiedLinkError`**:
+  * 检查 `System.loadLibrary("androidplayer")` 中的库名是否与 `CMakeLists.txt` 中 `add_library` 的目标名一致。
+  * 确保 FFmpeg 的 `.so` 文件已正确放置并被打包到 APK 中相应 ABI 的 `lib` 目录下。
+  * 检查 `CMakeLists.txt` 中链接 FFmpeg 库的路径和名称是否正确。
+  * 确保设备/模拟器的 ABI 与您提供的 `.so` 文件兼容。
+* **视频解码失败**:
+  * 确认输入的 MP4 文件格式被 FFmpeg 支持。
+  * 检查 FFmpeg 库是否完整编译，包含了所需的解码器。
+  * 查看 Logcat 中来自 "MyPlayerCPP" (Native 层) 和 "MainActivity" (Java 层) 的错误日志。
+* **音视频不同步 (进一步优化)**:
+  * 虽然当前版本实现了基本的跳转同步，但连续播放时的细微不同步可能仍存在。需要更复杂的基于时间戳的同步策略。
+* **ANativeWindow 错误**:
+  * 确保 `ANativeWindow_setBuffersGeometry` 在 `Surface` 有效且视频尺寸已知时调用。
+  * 确保在 `Surface` 销毁前或销毁时，Native 渲染线程已停止或不再访问 `ANativeWindow`。
+
+## 贡献
+
+欢迎提交 Pull Request 或提出 Issue 来改进这个项目。
+
+---
